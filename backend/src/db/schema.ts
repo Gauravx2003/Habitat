@@ -159,6 +159,7 @@ export const complaints = pgTable("complaints", {
   assignedStaff: uuid("assigned_staff").references(() => users.id),
   status: complaintStatusEnum("status").default("CREATED"),
   priority: priorityTypeEnum("priority").default("LOW"),
+  title: varchar("title", { length: 100 }),
   description: text("description").notNull(),
   slaDeadline: timestamp("sla_deadline"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -308,10 +309,25 @@ export const messIssues = pgTable("mess_issues", {
 
   issueTitle: varchar("issue_title", { length: 255 }).notNull(),
   issueDescription: text("issue_description").notNull(),
+  category: messIssueCategoryEnum("category").notNull(),
 
   status: messIssueStatusEnum("status").default("OPEN"),
   adminResponse: text("admin_response"),
   resolvedAt: timestamp("resolved_at"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messIssueAttachments = pgTable("mess_issue_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  issueId: uuid("issue_id")
+    .references(() => messIssues.id, { onDelete: "cascade" })
+    .notNull(),
+  uploadedBy: uuid("uploaded_by")
+    .references(() => users.id)
+    .notNull(),
+  fileURL: text("file_url").notNull(), //Cloudinary secure Url
+  publicId: text("public_id").notNull(), //Cloudinary Public ID
 
   createdAt: timestamp("created_at").defaultNow(),
 });

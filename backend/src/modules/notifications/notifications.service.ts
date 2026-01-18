@@ -2,8 +2,12 @@ import { db } from "../../db";
 import { notifications } from "../../db/schema";
 import { and, desc, eq } from "drizzle-orm";
 
-export const createNotification = async (userId: string, message: string) => {
-  await db.insert(notifications).values({ userId, message });
+export const createNotification = async (
+  tx: any,
+  userId: string,
+  message: string
+) => {
+  await tx.insert(notifications).values({ userId, message });
 };
 
 export const getMyNotifications = async (userId: string) => {

@@ -85,8 +85,10 @@ export const claimLostAndFoundItem = async (
   itemId: string,
   claimerId: string
 ) => {
-  try {
-    const [item] = await db
+  // 1. START THE TRANSACTION
+  return await db.transaction(async (tx) => {
+    // 2. USE 'tx' FOR DATABASE READS
+    const [item] = await tx
       .select()
       .from(lostAndFoundItems)
       .where(eq(lostAndFoundItems.id, itemId));
@@ -100,22 +102,24 @@ export const claimLostAndFoundItem = async (
     }
 
     if (item.type == "LOST") {
-      throw new Error("Item is lost");
+      throw new Error("Item is lost"); // You can't claim something someone lost, only what was found
     }
 
-    const [admin] = await db
+    const [admin] = await tx // USE 'tx' HERE TOO
       .select()
       .from(users)
       .where(eq(users.role, "ADMIN"));
 
+    // 3. PASS 'tx' TO NOTIFICATION
     if (admin) {
       await createNotification(
+        tx, // <--- Now this works because 'tx' is defined above
         admin.id,
-        "Item claimed and requires verificaition"
+        "Item claimed and requires verification"
       );
     }
 
-    const [record] = await db
+    const [record] = await tx // USE 'tx' FOR THE UPDATE
       .update(lostAndFoundItems)
       .set({
         status: "CLAIMED",
@@ -126,10 +130,7 @@ export const claimLostAndFoundItem = async (
       .returning();
 
     return record;
-  } catch (error) {
-    console.error("DB update failed:", error);
-    throw error;
-  }
+  });
 };
 
 export const getMyLostItem = async (userId: string) => {
@@ -171,7 +172,6 @@ export const getAllClaimedItems = async () => {
 
   return claimedItems;
 };
-
 
 // export const lostAndFoundItems = pgTable("lost_and_found_items", {
 //   id: uuid("id").defaultRandom().primaryKey(),

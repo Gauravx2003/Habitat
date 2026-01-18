@@ -4,11 +4,12 @@ import {
   createComplaint,
   getMyComplaints,
   getEscalatedComplaints,
+  getAllComplaintCategories,
 } from "./complaints.service";
 
 export const raiseComplaint = async (req: Authenticate, res: Response) => {
   try {
-    const { roomId, categoryId, description } = req.body;
+    const { roomId, title, categoryId, description } = req.body;
 
     if (!roomId || !categoryId || !description) {
       return res.status(400).json({ message: "Bad Request" });
@@ -18,7 +19,8 @@ export const raiseComplaint = async (req: Authenticate, res: Response) => {
       req.user!.userId,
       roomId,
       categoryId,
-      description
+      description,
+      title
     );
 
     return res.status(201).json(complaint);
@@ -48,6 +50,19 @@ export const getEscalatedComplaintsController = async (
   try {
     const escalatedComplaints = await getEscalatedComplaints();
     return res.status(200).json(escalatedComplaints);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const getComplaintCategoriesController = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const categories = await getAllComplaintCategories();
+    return res.status(200).json(categories);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });

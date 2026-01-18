@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import TopBar from "./Topbar";
+import TopBar from "./TopBar";
 import StaffSidebar from "./StaffSidebar";
 
 export default function StaffLayout() {

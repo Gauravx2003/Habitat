@@ -7,11 +7,18 @@ export interface LoggedInUser {
   email: string;
   role: UserRole;
   name: string;
+  roomNumber?: string;
+  roomId?: string;
+  blockName?: string;
+  blockId?: string;
 }
 
 export const login = async (email: string, password: string) => {
   const response = await api.post("/auth/login", { email, password });
   localStorage.setItem("token", response.data.token);
   localStorage.setItem("user", JSON.stringify(response.data.user));
-  return response.data.user as LoggedInUser;
+  return {
+    user: response.data.user as LoggedInUser,
+    token: response.data.token as string,
+  };
 };

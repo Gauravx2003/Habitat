@@ -8,44 +8,58 @@ export const uploadAttachment = async (
   uploadedBy: string,
   complaintId: string
 ) => {
-  const uploadedFiles = [];
-
-  const createdby = await db
-    .select({ residentId: complaints.residentId })
+  //Safety checks whether if complaint exists and if the user is authorized to upload attachments
+  const existingComplaint = await db
+    .select()
     .from(complaints)
-    .where(eq(complaints.id, complaintId));
+    .where(eq(complaints.id, complaintId))
+    .limit(1);
 
-  if (createdby[0].residentId !== uploadedBy) {
-    throw new Error("Unauthorized");
+  if (existingComplaint.length == 0) {
+    throw new Error("Complaint not found");
   }
 
-  for (const file of files) {
-    const result = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader
-        .upload_stream(
-          {
-            folder: "hostel-complaints",
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        )
-        .end(file.buffer);
-    });
+  if (existingComplaint[0].residentId !== uploadedBy) {
+    throw new Error(
+      "Unauthorized: You are not authorized to upload attachments for this complaint"
+    );
+  }
 
-    const [record] = await db
-      .insert(complaintAttachments)
-      .values({
+  //Parallel upload to cloudinary
+  const uploadPromises = files.map((files) => {
+    return new Promise<{ url: string; publicId: string }>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "hostel-complaints",
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(error);
+          } else {
+            resolve({ url: result.url, publicId: result.public_id });
+          }
+        }
+      );
+      uploadStream.end(files.buffer);
+    });
+  });
+
+  // Wait for ALL uploads to finish
+  const uploadedResults = await Promise.all(uploadPromises);
+
+  // 3. Batch Insert into Database
+  // Instead of inserting one by one, we insert all at once
+  const records = await db
+    .insert(complaintAttachments)
+    .values(
+      uploadedResults.map((img) => ({
         complaintId,
         uploadedBy,
-        fileURL: result.secure_url,
-        publicId: result.public_id,
-      })
-      .returning();
+        fileURL: img.url,
+        publicId: img.publicId,
+      }))
+    )
+    .returning();
 
-    uploadedFiles.push(record);
-  }
-
-  return uploadedFiles;
+  return records;
 };

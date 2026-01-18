@@ -2,6 +2,8 @@ import { useState } from "react";
 import { login } from "../services/auth.service";
 import { useNavigate } from "react-router-dom";
 import { Mail, Lock, Loader2, Building2 } from "lucide-react"; // Import icons
+import { useDispatch } from "react-redux";
+import { setCredentials } from "../store/slices/authSlice";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -10,6 +12,9 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false); // Added loading state
 
   const navigate = useNavigate();
+
+  //Initialize Dispatch
+  const dispatch = useDispatch();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +25,12 @@ const Login = () => {
       // Simulate network delay for effect (optional)
       // await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const user = await login(email, password);
+      const { user, token } = await login(email, password);
+
+      //dispatch setCredentials
+      dispatch(setCredentials({ user, token }));
+
+      console.log(user);
 
       if (user.role === "ADMIN") {
         navigate("/admin");

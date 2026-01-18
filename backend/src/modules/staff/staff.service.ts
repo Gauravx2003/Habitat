@@ -33,27 +33,30 @@ export const updateComplaintStatus = async (
   status: "IN_PROGRESS" | "RESOLVED",
   staffId: string
 ) => {
-  const [complaint] = await db
-    .select()
-    .from(complaints)
-    .where(eq(complaints.id, complaintId));
+  return await db.transaction(async (tx) => {
+    const [complaint] = await tx
+      .select()
+      .from(complaints)
+      .where(eq(complaints.id, complaintId));
 
-  if (!complaint || complaint.assignedStaff != staffId) {
-    throw new Error("Unauthorized");
-  }
+    if (!complaint || complaint.assignedStaff != staffId) {
+      throw new Error("Unauthorized");
+    }
 
-  if (status === "IN_PROGRESS") {
-    await createNotification(
-      complaint.residentId,
-      "Your complaint is in progress"
-    );
-  }
+    if (status === "IN_PROGRESS") {
+      await createNotification(
+        tx,
+        complaint.residentId,
+        "Your complaint is in progress"
+      );
+    }
 
-  const [updated] = await db
-    .update(complaints)
-    .set({ status })
-    .where(eq(complaints.id, complaintId))
-    .returning();
+    const [updated] = await tx
+      .update(complaints)
+      .set({ status })
+      .where(eq(complaints.id, complaintId))
+      .returning();
 
-  return updated;
+    return updated;
+  });
 };

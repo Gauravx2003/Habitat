@@ -50,6 +50,27 @@
       "when": 1768459550900,
       "tag": "0006_lovely_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1768459913848,
+      "tag": "0007_polite_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1768462267482,
+      "tag": "0008_wakeful_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1768542121737,
+      "tag": "0009_elite_vanisher",
+      "breakpoints": true
     }
   ]
 }

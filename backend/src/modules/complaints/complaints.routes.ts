@@ -4,9 +4,12 @@ import {
   raiseComplaint,
   getMyComplaintsController,
   getEscalatedComplaintsController,
+  getComplaintCategoriesController,
 } from "./complaints.controller";
 
 const router = Router();
+
+router.get("/categories", authenticate, getComplaintCategoriesController);
 
 router.post("/", authenticate, authorize(["RESIDENT"]), raiseComplaint);
 router.get(

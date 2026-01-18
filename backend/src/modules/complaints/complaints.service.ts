@@ -4,16 +4,25 @@ import {
   complaints,
   users,
   staffProfiles,
+  rooms,
 } from "../../db/schema";
 import { createNotification } from "../notifications/notifications.service";
 
-import { eq, NotNull, and, sql, getTableColumns } from "drizzle-orm";
+import {
+  eq,
+  NotNull,
+  and,
+  sql,
+  getTableColumns,
+  aliasedTable,
+} from "drizzle-orm";
 
 export const createComplaint = async (
   residentId: string,
   roomId: string,
   categoryId: string,
-  description: string
+  description: string,
+  title?: string
 ) => {
   //Fetch category ( for SLA )
 
@@ -56,24 +65,30 @@ export const createComplaint = async (
   const slaDeadline = new Date();
   slaDeadline.setHours(slaDeadline.getHours() + category.slaHours);
 
-  if (assignedStaff) {
-    await createNotification(assignedStaff, "You have a new complaint");
-  }
+  return await db.transaction(async (tx) => {
+    //1. Create Complaint
 
-  const [complaint] = await db
-    .insert(complaints)
-    .values({
-      residentId,
-      roomId,
-      categoryId,
-      assignedStaff,
-      status: assignedStaff ? "ASSIGNED" : "CREATED",
-      description,
-      slaDeadline,
-    })
-    .returning();
+    const [complaint] = await tx
+      .insert(complaints)
+      .values({
+        residentId,
+        title,
+        roomId,
+        categoryId,
+        assignedStaff,
+        status: assignedStaff ? "ASSIGNED" : "CREATED",
+        description,
+        slaDeadline,
+      })
+      .returning();
 
-  return complaint;
+    //2. Create notification
+    if (assignedStaff) {
+      await createNotification(tx, assignedStaff, "You have a new complaint");
+    }
+
+    return complaint;
+  });
 };
 
 export const getMyComplaints = async (id: string) => {
@@ -81,22 +96,44 @@ export const getMyComplaints = async (id: string) => {
     .select({
       ...getTableColumns(complaints),
       categoryName: complaintCategories.name,
+      staffName: users.name,
     })
     .from(complaints)
     .leftJoin(
       complaintCategories,
       eq(complaints.categoryId, complaintCategories.id)
     )
+    .leftJoin(users, eq(complaints.assignedStaff, users.id))
     .where(eq(complaints.residentId, id));
 
   return myComplaints;
 };
 
 export const getEscalatedComplaints = async () => {
+  const staff = aliasedTable(users, "staff");
+  const resident = aliasedTable(users, "resident");
+
   const escalatedComplaints = await db
-    .select()
+    .select({
+      ...getTableColumns(complaints),
+      categoryName: complaintCategories.name,
+      residentName: resident.name,
+      roomNumber: rooms.roomNumber,
+      assignedStaffName: staff.name,
+    })
     .from(complaints)
+    .leftJoin(
+      complaintCategories,
+      eq(complaints.categoryId, complaintCategories.id)
+    )
+    .leftJoin(resident, eq(complaints.residentId, resident.id))
+    .leftJoin(rooms, eq(complaints.roomId, rooms.id))
+    .leftJoin(staff, eq(complaints.assignedStaff, staff.id))
     .where(eq(complaints.status, "ESCALATED"));
 
   return escalatedComplaints;
+};
+
+export const getAllComplaintCategories = async () => {
+  return await db.select().from(complaintCategories);
 };

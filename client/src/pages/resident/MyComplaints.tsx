@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import AttachmentsUpload from "../../components/AttachmentsUpload";
-import { AlertCircle, CheckCircle2, Clock, FileText } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, FileText, Plus } from "lucide-react";
+import RaiseComplaintModal from "../../components/RaiseComplaintModal";
 
 interface Complaint {
   id: string;
+  title: string;
   categoryName: string;
   description: string;
   type: string;
   status: string;
   createdAt: string;
+  staffName?: string;
 }
 
 const MyComplaints = () => {
   const [complaints, setMyComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchComplaints();
@@ -31,6 +36,8 @@ const MyComplaints = () => {
         setIsLoading(false);
       });
   };
+
+  //console.log(complaints);
 
   const getStatusColor = (status: string) => {
     switch (status.toUpperCase()) {
@@ -56,90 +63,106 @@ const MyComplaints = () => {
     }
   };
 
+  // <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  //       <div>
+  //         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+  //           My Lost Items
+  //         </h1>
+  //         <p className="text-sm text-slate-500 mt-1">
+  //           Track status of items you have reported lost
+  //         </p>
+  //       </div>
+  //     </div>
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
             My Complaints
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Track and manage your filed complaints
+            Track status of complaints you have reported
           </p>
         </div>
-        <div>{/* Placeholder for future filters or actions */}</div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Complaint
+        </button>
       </div>
 
       {/* Content */}
       {isLoading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-slate-500">Loading complaints...</p>
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-indigo-600"></div>
         </div>
       ) : complaints.length === 0 ? (
-        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
-          <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FileText className="w-6 h-6 text-slate-400" />
-          </div>
-          <h3 className="text-lg font-medium text-slate-900">
-            No complaints filed
-          </h3>
-          <p className="text-slate-500 mt-1 max-w-sm mx-auto">
-            You haven't submitted any complaints yet. When you do, they will
-            appear here.
-          </p>
+        <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
+          <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+          <p className="text-slate-600">No complaints yet</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {complaints.map((complaint) => (
             <div
               key={complaint.id}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden"
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
             >
-              <div className="p-5">
-                <div className="flex justify-between items-start mb-3">
-                  <div
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
-                      complaint.status
-                    )}`}
-                  >
-                    {getStatusIcon(complaint.status)}
-                    {complaint.status}
-                  </div>
-                  <span className="text-xs text-slate-400">
-                    {new Date(complaint.createdAt).toLocaleDateString(
-                      undefined,
-                      {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      }
-                    )}
-                  </span>
-                </div>
-
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 line-clamp-1">
-                  {complaint.categoryName}
-                </h3>
-
-                <p className="text-sm text-slate-600 mb-4 line-clamp-3">
-                  {complaint.description}
-                </p>
-
-                <div className="mt-4">
-                  <AttachmentsUpload
-                    uploadUrl={`/complaints/${complaint.id}/attachments`}
-                    onSuccess={() => {
-                      fetchComplaints();
-                      // Ideally use a toast here
-                    }}
-                  />
-                </div>
+              <div className="flex justify-between items-start mb-3">
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getStatusColor(
+                    complaint.status
+                  )}`}
+                >
+                  {getStatusIcon(complaint.status)}
+                  {complaint.status}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {new Date(complaint.createdAt).toLocaleDateString()}
+                </span>
               </div>
+
+              <h3 className="font-semibold text-slate-900 mb-2">
+                {complaint.title}
+              </h3>
+
+              <div className="flex gap-2 mb-3 text-xs">
+                <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded">
+                  {complaint.categoryName}
+                </span>
+                {complaint.staffName ? (
+                  <span className="text-blue-700 px-2 py-1 rounded">
+                    Assigned to: {complaint.staffName}
+                  </span>
+                ) : (
+                  <span className="text-blue-700 px-2 py-1 rounded">
+                    Not assigned
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-slate-600 mb-4 line-clamp-2">
+                {complaint.description}
+              </p>
+
+              <AttachmentsUpload
+                uploadUrl={`/complaints/${complaint.id}/attachments`}
+                onSuccess={() => {
+                  fetchComplaints();
+                }}
+              />
             </div>
           ))}
         </div>
+      )}
+      {isModalOpen && (
+        <RaiseComplaintModal
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={fetchComplaints}
+        />
       )}
     </div>
   );
