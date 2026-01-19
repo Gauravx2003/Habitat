@@ -5,6 +5,7 @@ import {
   getMyComplaints,
   getEscalatedComplaints,
   getAllComplaintCategories,
+  reassignComplaint,
 } from "./complaints.service";
 
 export const raiseComplaint = async (req: Authenticate, res: Response) => {
@@ -63,6 +64,30 @@ export const getComplaintCategoriesController = async (
   try {
     const categories = await getAllComplaintCategories();
     return res.status(200).json(categories);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const reassignComplaintController = async (
+  req: Authenticate,
+  res: Response
+) => {
+  try {
+    const { complaintId, newStaffId } = req.body;
+
+    if (!complaintId || !newStaffId) {
+      return res.status(400).json({ message: "Bad Request" });
+    }
+
+    const complaint = await reassignComplaint(
+      complaintId,
+      newStaffId,
+      req.user!.userId
+    );
+
+    return res.status(200).json(complaint);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });

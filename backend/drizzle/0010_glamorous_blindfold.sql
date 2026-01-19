@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "current_occupancy" integer DEFAULT 0;

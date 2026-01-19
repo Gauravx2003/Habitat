@@ -5,6 +5,7 @@ import {
   getMyComplaintsController,
   getEscalatedComplaintsController,
   getComplaintCategoriesController,
+  reassignComplaintController,
 } from "./complaints.controller";
 
 const router = Router();
@@ -26,4 +27,10 @@ router.get(
   getEscalatedComplaintsController
 );
 
+router.patch(
+  "/reassign",
+  authenticate,
+  authorize(["ADMIN"]),
+  reassignComplaintController
+);
 export default router;

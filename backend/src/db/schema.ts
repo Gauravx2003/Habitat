@@ -104,6 +104,7 @@ export const rooms = pgTable("rooms", {
     .references(() => blocks.id)
     .notNull(),
   capacity: integer("capacity").default(1),
+  currentOccupancy: integer("current_occupancy").default(0),
 });
 
 export const users = pgTable("users", {
@@ -145,7 +146,7 @@ export const complaintCategories = pgTable("complaint_categories", {
   vendorOnly: boolean("vendor_only").default(false),
 });
 
-export const complaints = pgTable("complaints", {
+export const  complaints = pgTable("complaints", {
   id: uuid("id").defaultRandom().primaryKey(),
   residentId: uuid("resident_id")
     .references(() => users.id)

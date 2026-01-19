@@ -71,6 +71,13 @@
       "when": 1768542121737,
       "tag": "0009_elite_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1768748291451,
+      "tag": "0010_glamorous_blindfold",
+      "breakpoints": true
     }
   ]
 }

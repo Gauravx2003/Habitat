@@ -18,6 +18,7 @@ import noticesRoutes from "./modules/notices/notices.routes";
 import lateEntryExitRoutes from "./modules/lateEntryExit/lateEntryExit.routes";
 import visitorsRoutes from "./modules/visitors/visitors.routes";
 import messIssueRoutes from "./modules/messIssue/messIssue.routes";
+import residentCreationRoutes from "./modules/residentCreation/residentCreation.routes";
 import cron from "node-cron";
 
 const app = express();
@@ -44,6 +45,7 @@ app.use("/api/notices", noticesRoutes);
 app.use("/api/late-entry-exit", lateEntryExitRoutes);
 app.use("/api/visitors", visitorsRoutes);
 app.use("/api/mess-issues", messIssueRoutes);
+app.use("/api/resident-creation", residentCreationRoutes);
 
 const PORT = process.env.PORT || 5000;
 

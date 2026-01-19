@@ -137,3 +137,63 @@ export const getEscalatedComplaints = async () => {
 export const getAllComplaintCategories = async () => {
   return await db.select().from(complaintCategories);
 };
+
+export const reassignComplaint = async (
+  complaintId: string,
+  newStaffId: string,
+  adminId: string
+) => {
+  //Get Existing Complaint
+  return await db.transaction(async (tx) => {
+    const [existingComplaint] = await tx
+      .select({
+        ...getTableColumns(complaints),
+        slaHours: complaintCategories.slaHours,
+      })
+      .from(complaints)
+      .innerJoin(
+        complaintCategories,
+        eq(complaints.categoryId, complaintCategories.id)
+      )
+      .where(eq(complaints.id, complaintId));
+
+    if (!existingComplaint) {
+      throw new Error("Complaint not found");
+    }
+
+    //Validate Staff
+    const [staff] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.id, newStaffId));
+
+    if (!staff) {
+      throw new Error("Staff not found");
+    }
+
+    if (staff.role !== "STAFF") {
+      throw new Error("Staff is not a valid staff member");
+    }
+
+    const newSLADeadline = new Date();
+    newSLADeadline.setHours(
+      newSLADeadline.getHours() + existingComplaint.slaHours
+    );
+
+    //Update the SLA deadline for the complaint
+    const [updatedComplaint] = await tx
+      .update(complaints)
+      .set({
+        assignedStaff: newStaffId,
+        slaDeadline: newSLADeadline,
+        status: "ASSIGNED",
+      })
+      .where(eq(complaints.id, complaintId))
+      .returning();
+
+    //Create notification for the staff
+    await createNotification(tx, newStaffId, "You have a new complaint");
+
+    return updatedComplaint;
+  });
+};
