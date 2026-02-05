@@ -23,7 +23,6 @@ const Login = () => {
 
     try {
       // Simulate network delay for effect (optional)
-      // await new Promise(resolve => setTimeout(resolve, 1000));
 
       const { user, token } = await login(email, password);
 

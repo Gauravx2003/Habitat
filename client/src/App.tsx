@@ -19,7 +19,7 @@ import MessIssues from "./pages/resident/MessIssues";
 import LateEntryExit from "./pages/resident/LateEntryExit";
 import LateEntryExitApproval from "./pages/admin/LateEntryExitApproval";
 import FinesAndPayments from "./pages/resident/FinesAndPayments";
-import FineManage from "./pages/admin/FineManage";
+
 import VisitorRequest from "./pages/resident/VisitorRequest";
 
 const App = () => {
@@ -44,7 +44,6 @@ const App = () => {
           <Route path="escalations" element={<EscalatedComplaints />} />
           <Route path="lost-found" element={<LostFoundApprovals />} />
           <Route path="late-entry-exit" element={<LateEntryExitApproval />} />
-          <Route path="fines-payments" element={<FineManage />} />
         </Route>
 
         {/* STAFF */}
