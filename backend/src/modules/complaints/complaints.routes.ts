@@ -17,14 +17,20 @@ router.get(
   "/my",
   authenticate,
   authorize(["RESIDENT"]),
-  getMyComplaintsController,
+  getMyComplaintsController
 );
 
 router.get(
   "/escalated",
   authenticate,
   authorize(["ADMIN"]),
-  getEscalatedComplaintsController,
+  getEscalatedComplaintsController
 );
 
+router.patch(
+  "/reassign/:id",
+  authenticate,
+  authorize(["ADMIN"]),
+  reassignComplaintController
+);
 export default router;
