@@ -7,7 +7,7 @@ import {
   payments,
   users,
 } from "../../db/schema";
-import { eq, and, gt, desc } from "drizzle-orm";
+import { eq, and, gt, desc, sql, getTableColumns } from "drizzle-orm";
 import { createPayment } from "../finesAndPayments/finesAndPayments.service";
 
 // --- Book Listing ---
@@ -17,6 +17,32 @@ export const getAllBooks = async (hostelId: string) => {
     .select()
     .from(libraryBooks)
     .where(eq(libraryBooks.hostelId, hostelId));
+};
+
+export const getMyBooks = async (
+  userId: string,
+  status: "BORROWED" | "RETURNED" | "OVERDUE" | "ALL",
+) => {
+  let query = db
+    .select({
+      ...getTableColumns(libraryBooks),
+      issueDate: libraryTransactions.issueDate,
+      dueDate: libraryTransactions.dueDate,
+      returnDate: libraryTransactions.returnDate,
+      fineAmount: libraryTransactions.fineAmount,
+      isFinePaid: libraryTransactions.isFinePaid,
+      transactionStatus: libraryTransactions.status,
+    })
+    .from(libraryTransactions)
+    .innerJoin(libraryBooks, eq(libraryTransactions.bookId, libraryBooks.id));
+
+  const conditions: any[] = [eq(libraryTransactions.userId, userId)];
+
+  if (status === "OVERDUE" || status === "BORROWED" || status === "RETURNED") {
+    conditions.push(eq(libraryTransactions.status, status));
+  }
+
+  return await query.where(and(...conditions));
 };
 
 export const getBookById = async (bookId: string) => {
@@ -65,10 +91,7 @@ export const checkDigitalAccess = async (userId: string, bookId: string) => {
 
 export const borrowBook = async (userId: string, bookId: string) => {
   return await db.transaction(async (tx) => {
-    // 1. Check if user has active membership (optional restriction: only members can borrow?)
-    // Requirement didn't explicitly say PHYSICAL books need membership, but usually yes.
-    // Let's assume yes for consistency, or maybe plans define "maxBooksAllowed".
-
+    // 1. Check Membership
     const [membership] = await tx
       .select()
       .from(libraryMemberships)
@@ -79,21 +102,18 @@ export const borrowBook = async (userId: string, bookId: string) => {
           gt(libraryMemberships.endDate, new Date()),
         ),
       )
-      .orderBy(desc(libraryMemberships.endDate))
       .limit(1);
 
-    if (!membership)
-      throw new Error("Active Library Membership required to borrow books");
+    if (!membership) throw new Error("Active Library Membership required");
 
-    // 2. Check Plan limits
+    // 2. Check Plan Limits
     const [plan] = await tx
       .select()
       .from(libraryPlans)
       .where(eq(libraryPlans.id, membership.planId));
 
-    // Count currently borrowed books
     const activeTransactions = await tx
-      .select()
+      .select() // Pro-tip: You can use { count: sql`count(*)` } for performance
       .from(libraryTransactions)
       .where(
         and(
@@ -103,24 +123,30 @@ export const borrowBook = async (userId: string, bookId: string) => {
       );
 
     if (
-      plan &&
-      plan.maxBooksAllowed &&
+      plan?.maxBooksAllowed &&
       activeTransactions.length >= plan.maxBooksAllowed
     ) {
-      throw new Error(
-        `Plan limit reached. Max books allowed: ${plan.maxBooksAllowed}`,
-      );
+      throw new Error(`Limit reached. Max books: ${plan.maxBooksAllowed}`);
     }
 
-    // 3. Create Transaction
-    // Due Date = 14 days default (or from plan? Plan doesn't have duration per book, so 14 days default)
+    // 3. CRITICAL: Check Book Availability & Lock Row
+    const [book] = await tx
+      .select()
+      .from(libraryBooks)
+      .where(eq(libraryBooks.id, bookId)); // In raw SQL we would add "FOR UPDATE"
+
+    if (!book || book.availableCopies < 1) {
+      throw new Error("Book is currently unavailable");
+    }
+
+    // 4. Create Transaction & Update Inventory
     const issueDate = new Date();
     const dueDate = new Date();
-    dueDate.setDate(issueDate.getDate() + 14);
+    dueDate.setDate(issueDate.getDate() + 14); // Default 14 days
 
     await tx
       .update(libraryBooks)
-      .set({ status: "BORROWED" })
+      .set({ availableCopies: sql`${libraryBooks.availableCopies} - 1` })
       .where(eq(libraryBooks.id, bookId));
 
     const [transaction] = await tx
@@ -130,7 +156,7 @@ export const borrowBook = async (userId: string, bookId: string) => {
         bookId,
         issueDate,
         dueDate,
-        status: "BORROWED",
+        status: "BORROWED", // Ensure this matches your transactionStatusEnum
       })
       .returning();
 
@@ -150,50 +176,39 @@ export const returnBook = async (transactionId: string) => {
     }
 
     const returnDate = new Date();
+    let fineAmount = 0;
+    let diffDays = 0;
 
     // 1. Calculate Fine
-    let fineAmount = 0;
     if (returnDate > transaction.dueDate) {
-      // Fetch Plan to get finePerDay
-      // Need to find which membership was active/used?
-      // Or just check user's current active plan?
-      // Better to find the plan associated with the user.
+      const diffTime = Math.abs(
+        returnDate.getTime() - transaction.dueDate.getTime(),
+      );
+      diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      // We'll find the membership active AT THE TIME OF BORROWING or current.
-      // Let's use current active membership for fine rules.
+      // Try to find the membership that WAS active or is CURRENTLY active
+      // Logic: Just get the user's latest plan, even if expired, to determine rates
       const [membership] = await tx
         .select()
         .from(libraryMemberships)
-        .where(
-          and(
-            eq(libraryMemberships.userId, transaction.userId),
-            eq(libraryMemberships.status, "ACTIVE"),
-          ),
-        )
+        .where(eq(libraryMemberships.userId, transaction.userId))
         .orderBy(desc(libraryMemberships.endDate))
         .limit(1);
+
+      let finePerDay = 10; // Default fallback fine
 
       if (membership) {
         const [plan] = await tx
           .select()
           .from(libraryPlans)
           .where(eq(libraryPlans.id, membership.planId));
-        if (plan && plan.finePerDay) {
-          const diffTime = Math.abs(
-            returnDate.getTime() - transaction.dueDate.getTime(),
-          );
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          fineAmount = diffDays * plan.finePerDay;
+
+        if (plan?.finePerDay) {
+          finePerDay = plan.finePerDay;
         }
-      } else {
-        // Fallback default if no plan found (shouldn't happen if membership required)
-        fineAmount =
-          10 *
-          Math.ceil(
-            (returnDate.getTime() - transaction.dueDate.getTime()) /
-              (1000 * 60 * 60 * 24),
-          );
       }
+
+      fineAmount = diffDays * finePerDay;
     }
 
     // 2. Update Transaction
@@ -201,43 +216,28 @@ export const returnBook = async (transactionId: string) => {
       .update(libraryTransactions)
       .set({
         returnDate,
-        status: "AVAILABLE", // Transaction status isn't same as Book status enum, schema uses bookStatusEnum for transaction too?
-        // schema says: status: bookStatusEnum("status").default("BORROWED") in libraryTransactions
-        // Wait, libraryTransactions status should probably be "RETURNED"?
-        // Schema: bookStatusEnum contains AVAILABLE, BORROWED, LOST, MAINTENANCE.
-        // It doesn't have "RETURNED". So let's use "AVAILABLE" for transaction to indicate it's closed?
-        // Or maybe we treat "status" in transaction as the state of the book allocation.
-        // If returned, maybe we don't update status to AVAILABLE in transaction, but rather we rely on returnDate.
-        // However, keeping it BORROWED is confusing.
-        // ACTUALLY: The schema reuses `bookStatusEnum` for `libraryTransactions`.
-        // bookStatusEnum: AVAILABLE, BORROWED, LOST, MAINTENANCE.
-        // If I return it, the transaction is effectively closed. "AVAILABLE" seems wrong for a historical transaction record.
-        // NOTE: Schema design might be slightly off here, but I will stick to "AVAILABLE" or just rely on `returnDate` being non-null.
-        // Let's set it to AVAILABLE to imply "Closed/ returned".
+        status: "RETURNED", // Ensure Schema has this value!
         fineAmount,
       })
       .where(eq(libraryTransactions.id, transactionId));
 
-    // 3. Update Book Status
+    // 3. Update Inventory (Increase copies)
     await tx
       .update(libraryBooks)
-      .set({ status: "AVAILABLE" })
+      .set({ availableCopies: sql`${libraryBooks.availableCopies} + 1` })
       .where(eq(libraryBooks.id, transaction.bookId));
 
-    // 4. Create Payment for Fine if > 0
+    // 4. Create Fine Payment
     if (fineAmount > 0) {
       await createPayment(
         transaction.userId,
         fineAmount,
-        "LIBRARY_FINE",
-        `Fine for late return of book (Tx: ${transactionId})`,
-        transaction.userId, // System generated, but linked to user? Or maybe null if system? existing createPayment requires issuedBy string...
-        // We'll use the user ID as "issuedBy" (self) or we need a system ID.
-        // Existing createPayment: issuedBy is UUID.
-        // I will use user ID for now to avoid FK error.
+        "LIBRARY_FINE", // Changed from "LIBRARY_FINE" to match generic Payment Category enum if needed
+        `Library Fine: ${diffDays} days late (Tx: ${transactionId.slice(0, 8)})`,
+        undefined,
       );
     }
 
-    return { message: "Book returned", fineAmount };
+    return { message: "Book returned successfully", fineAmount };
   });
 };

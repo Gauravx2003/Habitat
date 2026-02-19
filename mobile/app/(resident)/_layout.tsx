@@ -2,6 +2,10 @@ import { Tabs } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Platform } from "react-native";
+import {
+  TabBarProvider,
+  useTabBarAnimation,
+} from "../../src/context/TabBarContext";
 
 export default function ResidentLayout() {
   const insets = useSafeAreaInsets();
@@ -97,6 +101,18 @@ export default function ResidentLayout() {
 
       <Tabs.Screen
         name="gate-pass"
+        options={{
+          href: null, // <--- Hides this tab
+        }}
+      />
+      <Tabs.Screen
+        name="attendance"
+        options={{
+          href: null, // <--- Hides this tab
+        }}
+      />
+      <Tabs.Screen
+        name="campus-hub"
         options={{
           href: null, // <--- Hides this tab
         }}

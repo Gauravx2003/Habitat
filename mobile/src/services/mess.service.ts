@@ -10,6 +10,17 @@ export interface MessIssue {
   createdAt: string;
 }
 
+export interface MessMenu {
+  id: string;
+  date: string;
+  mealType: "BREAKFAST" | "LUNCH" | "SNACKS" | "DINNER";
+  items: string;
+  servingTime: string;
+  cutoffTime: string;
+  status?: "OPTED_IN" | "SCANNED" | "MISSED" | null;
+  qrToken?: string | null;
+}
+
 export const messService = {
   createIssue: async (data: {
     issueTitle: string;
@@ -22,6 +33,21 @@ export const messService = {
 
   getMyIssues: async () => {
     const response = await api.get<MessIssue[]>("/mess-issues/my");
+    return response.data;
+  },
+
+  getDailyMenu: async () => {
+    const response = await api.get<MessMenu[]>("/smart-mess/menu");
+    return response.data;
+  },
+
+  optInForMeal: async (menuId: string) => {
+    const response = await api.post("/smart-mess/opt-in", { menuId });
+    return response.data;
+  },
+
+  optOutForMeal: async (menuId: string) => {
+    const response = await api.post("/smart-mess/opt-out", { menuId });
     return response.data;
   },
 };

@@ -25,10 +25,10 @@ const Login = () => {
       // Simulate network delay for effect (optional)
       // await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const { user, token } = await login(email, password);
+      const { user, token, refreshToken } = await login(email, password);
 
       //dispatch setCredentials
-      dispatch(setCredentials({ user, token }));
+      dispatch(setCredentials({ user, token, refreshToken }));
 
       //console.log(user);
 

@@ -1,34 +1,38 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-import bcrypt from "bcrypt";
 import { db } from "./index";
 
-import {
-  organizations,
-  hostels,
-  blocks,
-  rooms,
-  users,
-  residentProfiles,
-  staffProfiles,
-  complaintCategories,
-  room_types,
-  gymPlans,
-  libraryPlans,
-  libraryBooks,
-} from "./schema";
+import { hostels, messMenu } from "./schema";
+import { v4 as uuidv4 } from "uuid";
 
 import { eq } from "drizzle-orm";
 
+const RULES = {
+  BREAKFAST: {
+    time: "08:00",
+    cutoffHours: 12,
+    items: ["Poha", "Tea/Coffee", "Oats", "Banana"],
+  },
+  LUNCH: {
+    time: "13:00",
+    cutoffHours: 3,
+    items: ["Paneer Butter Masala", "Dal Tadka", "Rice", "Chapati", "Salad"],
+  },
+  SNACKS: {
+    time: "17:00",
+    cutoffHours: 1,
+    items: ["Samosa", "Tea", "Biscuits"],
+  },
+  DINNER: {
+    time: "20:00",
+    cutoffHours: 4,
+    items: ["Mix Veg", "Dal Fry", "Jeera Rice", "Roti", "Gulab Jamun"],
+  },
+};
+
 async function seed() {
   console.log("🌱 Seeding database...");
-
-  // 1. Organization
-  const [org] = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.name, "Demo College"));
 
   // 2. Hostel
   const [hostel] = await db
@@ -36,78 +40,52 @@ async function seed() {
     .from(hostels)
     .where(eq(hostels.name, "Boys Hostel A"));
 
-  // Only insert if not exists to avoid duplicates or assume seeding runs on fresh DB
-  // For simplicity, we just insert. Or delete existing?
-  // User asked for "populate", usually implies idempotent or fresh.
-  // I will just insert. If error (constraint), that's acceptable for a simple seed script usually.
-  // Or check if exists first? The previous script fetched org/hostel but didn't check if plans exist.
-  // I'll stick to simple insert.
+  const hostelId = hostel.id;
+  const today = new Date();
 
-  // 5. Library Books
-  console.log("📖 Seeding Library Books...");
-  await db.insert(libraryBooks).values([
-    {
-      organizationId: org.id,
-      hostelId: hostel.id,
-      title: "Clean Code",
-      author: "Robert C. Martin",
-      isbn: "978-0132350884",
-      coverUrl:
-        "https://m.media-amazon.com/images/I/41xShlnTZTL._SX376_BO1,204,203,200_.jpg",
-      isDigital: false,
-      status: "AVAILABLE",
-    },
-    {
-      organizationId: org.id,
-      hostelId: hostel.id,
-      title: "The Pragmatic Programmer",
-      author: "Andrew Hunt, David Thomas",
-      isbn: "978-0201616224",
-      coverUrl:
-        "https://m.media-amazon.com/images/I/51W1sBPO7tL._SX380_BO1,204,203,200_.jpg",
-      isDigital: true,
-      downloadUrl: "https://example.com/pragmatic_programmer.pdf",
-      format: "EBOOK",
-      status: "AVAILABLE",
-    },
-    {
-      organizationId: org.id,
-      hostelId: hostel.id,
-      title: "Introduction to Algorithms",
-      author: "Thomas H. Cormen",
-      isbn: "978-0262033848",
-      coverUrl:
-        "https://m.media-amazon.com/images/I/41T0iBxY8FL._SX218_BO1,204,203,200_QL40_FMwebp_.jpg",
-      isDigital: false,
-      status: "AVAILABLE",
-    },
-    {
-      organizationId: org.id,
-      hostelId: hostel.id,
-      title: "Design Patterns",
-      author: "Erich Gamma",
-      isbn: "978-0201633610",
-      coverUrl:
-        "https://m.media-amazon.com/images/I/51k+04D0CLL._SX376_BO1,204,203,200_.jpg",
-      isDigital: false,
-      status: "AVAILABLE",
-    },
-    {
-      organizationId: org.id,
-      hostelId: hostel.id,
-      title: "You Don't Know JS",
-      author: "Kyle Simpson",
-      isbn: "978-1491904244",
-      coverUrl:
-        "https://m.media-amazon.com/images/I/51I90oJqFKL._SX331_BO1,204,203,200_.jpg",
-      isDigital: true,
-      downloadUrl: "https://example.com/ydkjs.pdf",
-      format: "EBOOK",
-      status: "AVAILABLE",
-    },
-  ]);
+  // 2. Generate Menu for Today + Next 2 Days
+  const menuEntries = [];
 
-  console.log("✅ Seeding completed successfully");
+  for (let i = 0; i < 3; i++) {
+    const currentDate = new Date(today);
+    currentDate.setDate(today.getDate() + i); // i=0 (Today), i=1 (Tomorrow)...
+
+    // Loop through each meal type
+    for (const [type, rule] of Object.entries(RULES)) {
+      // A. Set Serving Time (e.g., "2026-02-18 13:00:00")
+      const servingTime = new Date(currentDate);
+      const [hours, minutes] = rule.time.split(":").map(Number);
+      servingTime.setHours(hours, minutes, 0, 0);
+
+      // B. Calculate Cutoff Time (Serving - CutoffHours)
+      const cutoffTime = new Date(servingTime);
+      cutoffTime.setHours(cutoffTime.getHours() - rule.cutoffHours);
+
+      // C. Randomize Items slightly for variety
+      const dailyItems = [...rule.items];
+      if (Math.random() > 0.5) dailyItems.push("Special Sweet");
+
+      menuEntries.push({
+        hostelId,
+        date: new Date(currentDate), // Store the base date
+        mealType: type as "BREAKFAST" | "LUNCH" | "SNACKS" | "DINNER",
+        items: dailyItems.join(", "),
+        servingTime,
+        cutoffTime,
+      });
+    }
+  }
+
+  // 3. Insert into DB
+  if (menuEntries.length > 0) {
+    await db.insert(messMenu).values(menuEntries);
+    console.log(
+      `✅ Successfully added ${menuEntries.length} meals for the next 3 days.`,
+    );
+  } else {
+    console.log("⚠️ No data generated.");
+  }
+
   process.exit(0);
 }
 

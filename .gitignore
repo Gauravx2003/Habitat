@@ -44,3 +44,5 @@ Thumbs.db
 # ===============================
 logs/
 *.log
+
+habitat-81fec-firebase-adminsdk-fbsvc-b9de403d1e.json

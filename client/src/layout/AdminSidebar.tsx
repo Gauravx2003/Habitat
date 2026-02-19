@@ -23,7 +23,7 @@ const AdminSidebar = () => {
       icon: IndianRupee,
       label: "Fines & Payments",
     },
-    { path: "/admin/notices", icon: Bell, label: "Notices" },
+    { path: "/admin/campus-hub", icon: Bell, label: "CampusHub" },
   ];
 
   return (

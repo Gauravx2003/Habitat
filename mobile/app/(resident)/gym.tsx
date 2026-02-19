@@ -11,64 +11,121 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import {
+  membershipService,
+  Membership,
+  Plan,
+} from "../../src/services/membership.service";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 // Gym Plans Data
-const GYM_PLANS = [
-  {
-    id: "1",
-    name: "Silver",
-    tier: "SILVER",
-    price: 300,
-    duration: "MONTHLY",
-    hasTrainer: false,
-    accessHours: "6 AM - 8 PM",
-    features: [
-      "Access to cardio equipment",
-      "Basic weights section",
-      "6 AM - 8 PM access",
-      "Locker facility",
-    ],
-    color: "#94A3B8",
-    gradient: ["#94A3B8", "#64748B"],
-  },
-  {
-    id: "2",
-    name: "Gold",
-    tier: "GOLD",
-    price: 1500,
-    duration: "QUARTERLY",
-    hasTrainer: true,
-    accessHours: "5 AM - 10 PM",
-    features: [
-      "Full gym access",
-      "Personal trainer included",
-      "5 AM - 10 PM access",
-      "Nutrition consultation",
-      "Premium locker",
-      "Workout plan",
-    ],
-    color: "#F59E0B",
-    gradient: ["#F59E0B", "#D97706"],
-  },
-];
+const getGymPlanDisplayInfo = (plan: Plan) => {
+  const name = plan.name.toLowerCase();
+  if (name.includes("silver") || name.includes("basic")) {
+    return {
+      tier: "SILVER",
+      color: "#94A3B8",
+      gradient: ["#94A3B8", "#64748B"],
+      features: [
+        "Access to cardio equipment",
+        "Basic weights section",
+        plan.accessHours || "6 AM - 8 PM access",
+        "Locker facility",
+      ],
+    };
+  } else {
+    return {
+      tier: "GOLD",
+      color: "#F59E0B",
+      gradient: ["#F59E0B", "#D97706"],
+      features: [
+        "Full gym access",
+        "Personal trainer included",
+        plan.accessHours || "5 AM - 10 PM access",
+        "Nutrition consultation",
+        "Premium locker",
+        "Workout plan",
+      ],
+    };
+  }
+};
 
 // Mock current membership
-const CURRENT_MEMBERSHIP = {
-  hasMembership: true,
-  plan: GYM_PLANS[0], // Gold plan
-  startDate: "Jan 15, 2026",
-  endDate: "Apr 15, 2026",
-  status: "ACTIVE", // ACTIVE, EXPIRED, CANCELLED
-  checkIns: 42,
-  lastVisit: "Feb 12, 2026",
+// Mock current membership (FALLBACK)
+const DUMMY_MEMBERSHIP = {
+  hasMembership: false,
+  status: "EXPIRED",
+  plan: null,
+  startDate: "",
+  endDate: "",
+  checkIns: 0,
+  lastVisit: "-",
 };
 
 export default function GymScreen() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<
-    (typeof GYM_PLANS)[0] | null
-  >(null);
+  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [membership, setMembership] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [fetchedPlans, myMemberships] = await Promise.all([
+        membershipService.getGymPlans(),
+        membershipService.getMyMemberships(),
+      ]);
+      setPlans(fetchedPlans);
+
+      const activeGymMem = myMemberships.gym.find((m) => m.status === "ACTIVE");
+      if (activeGymMem) {
+        const planDetails = fetchedPlans.find(
+          (p) => p.name === activeGymMem.planName,
+        );
+        const displayInfo = planDetails
+          ? getGymPlanDisplayInfo(planDetails)
+          : { gradient: ["#333", "#000"], tier: "MEMBER" };
+
+        setMembership({
+          ...activeGymMem,
+          hasMembership: true,
+          plan: { ...planDetails, ...displayInfo },
+          endDate: new Date(activeGymMem.endDate).toDateString(),
+          // Dummies
+          checkIns: 42,
+          lastVisit: "Feb 12, 2026",
+        });
+      } else {
+        setMembership(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch gym data", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, []),
+  );
+
+  const handleSubscribe = async () => {
+    if (!selectedPlan) return;
+    try {
+      await membershipService.subscribeToPlan(selectedPlan.id, "GYM");
+      setShowPlanModal(false);
+      fetchData();
+      alert("Subscription request sent! Please complete payment.");
+    } catch (error) {
+      alert("Failed to subscribe");
+    }
+  };
+
   const flipAnimation = useRef(new Animated.Value(0)).current;
 
   const flipCard = () => {
@@ -100,7 +157,7 @@ export default function GymScreen() {
   };
 
   const renderMembershipCard = () => {
-    if (!CURRENT_MEMBERSHIP.hasMembership) {
+    if (!membership || !membership.hasMembership) {
       return (
         <View style={styles.noMembershipCard}>
           <MaterialCommunityIcons name="dumbbell" size={50} color="#94A3B8" />
@@ -118,8 +175,8 @@ export default function GymScreen() {
       );
     }
 
-    const plan = CURRENT_MEMBERSHIP.plan;
-    const isActive = CURRENT_MEMBERSHIP.status === "ACTIVE";
+    const plan = membership.plan;
+    const isActive = membership.status === "ACTIVE";
 
     return (
       <Pressable onPress={flipCard} style={styles.cardContainer}>
@@ -173,9 +230,7 @@ export default function GymScreen() {
                   },
                 ]}
               >
-                <Text style={styles.statusText}>
-                  {CURRENT_MEMBERSHIP.status}
-                </Text>
+                <Text style={styles.statusText}>{membership.status}</Text>
               </View>
             </View>
             <View style={styles.tapHint}>
@@ -216,9 +271,7 @@ export default function GymScreen() {
               </View>
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>VALID TILL</Text>
-                <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.endDate}
-                </Text>
+                <Text style={styles.cardBackValue}>{membership.endDate}</Text>
               </View>
             </View>
 
@@ -226,14 +279,12 @@ export default function GymScreen() {
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>CHECK-INS</Text>
                 <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.checkIns} visits
+                  {membership.checkIns} visits
                 </Text>
               </View>
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>LAST VISIT</Text>
-                <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.lastVisit}
-                </Text>
+                <Text style={styles.cardBackValue}>{membership.lastVisit}</Text>
               </View>
             </View>
 
@@ -285,80 +336,84 @@ export default function GymScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {GYM_PLANS.map((plan) => (
-              <TouchableOpacity
-                key={plan.id}
-                style={[
-                  styles.planCard,
-                  selectedPlan?.id === plan.id && styles.planCardSelected,
-                ]}
-                onPress={() => setSelectedPlan(plan)}
-              >
-                <View style={styles.planHeader}>
-                  <View style={styles.planLeft}>
-                    <MaterialCommunityIcons
-                      name="dumbbell"
-                      size={32}
-                      color={plan.color}
-                    />
-                    <View style={{ marginLeft: 12 }}>
-                      <View
-                        style={[
-                          styles.planTierBadge,
-                          {
-                            backgroundColor: plan.color + "20",
-                            borderColor: plan.color,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[styles.planTierText, { color: plan.color }]}
+            {plans.map((item) => {
+              const displayInfo = getGymPlanDisplayInfo(item);
+              const plan = { ...item, ...displayInfo };
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={[
+                    styles.planCard,
+                    selectedPlan?.id === plan.id && styles.planCardSelected,
+                  ]}
+                  onPress={() => setSelectedPlan(plan)}
+                >
+                  <View style={styles.planHeader}>
+                    <View style={styles.planLeft}>
+                      <MaterialCommunityIcons
+                        name="dumbbell"
+                        size={32}
+                        color={plan.color}
+                      />
+                      <View style={{ marginLeft: 12 }}>
+                        <View
+                          style={[
+                            styles.planTierBadge,
+                            {
+                              backgroundColor: plan.color + "20",
+                              borderColor: plan.color,
+                            },
+                          ]}
                         >
-                          {plan.tier}
-                        </Text>
+                          <Text
+                            style={[styles.planTierText, { color: plan.color }]}
+                          >
+                            {plan.tier}
+                          </Text>
+                        </View>
+                        <Text style={styles.planName}>{plan.name}</Text>
                       </View>
-                      <Text style={styles.planName}>{plan.name}</Text>
+                    </View>
+                    <View style={styles.planPriceContainer}>
+                      <Text style={styles.planPrice}>₹{plan.price}</Text>
+                      <Text style={styles.planDuration}>/{plan.duration}</Text>
                     </View>
                   </View>
-                  <View style={styles.planPriceContainer}>
-                    <Text style={styles.planPrice}>₹{plan.price}</Text>
-                    <Text style={styles.planDuration}>/{plan.duration}</Text>
-                  </View>
-                </View>
 
-                <View style={styles.planMeta}>
-                  <View style={styles.metaItem}>
-                    <MaterialCommunityIcons
-                      name="clock-outline"
-                      size={16}
-                      color="#64748B"
-                    />
-                    <Text style={styles.metaText}>{plan.accessHours}</Text>
-                  </View>
-                  {plan.hasTrainer && (
+                  <View style={styles.planMeta}>
                     <View style={styles.metaItem}>
                       <MaterialCommunityIcons
-                        name="account-tie"
+                        name="clock-outline"
                         size={16}
-                        color="#22C55E"
+                        color="#64748B"
                       />
-                      <Text style={[styles.metaText, { color: "#22C55E" }]}>
-                        Trainer Included
-                      </Text>
+                      <Text style={styles.metaText}>{plan.accessHours}</Text>
                     </View>
-                  )}
-                </View>
+                    {plan.hasTrainer && (
+                      <View style={styles.metaItem}>
+                        <MaterialCommunityIcons
+                          name="account-tie"
+                          size={16}
+                          color="#22C55E"
+                        />
+                        <Text style={[styles.metaText, { color: "#22C55E" }]}>
+                          Trainer Included
+                        </Text>
+                      </View>
+                    )}
+                  </View>
 
-                <View style={styles.planFeatures}>
-                  {plan.features.map((feature, idx) => (
-                    <View key={idx} style={styles.featureRow}>
-                      <Feather name="check" size={16} color="#22C55E" />
-                      <Text style={styles.featureText}>{feature}</Text>
-                    </View>
-                  ))}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <View style={styles.planFeatures}>
+                    {plan.features.map((feature, idx) => (
+                      <View key={idx} style={styles.featureRow}>
+                        <Feather name="check" size={16} color="#22C55E" />
+                        <Text style={styles.featureText}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           <TouchableOpacity
@@ -367,13 +422,10 @@ export default function GymScreen() {
               !selectedPlan && styles.subscribeBtnDisabled,
             ]}
             disabled={!selectedPlan}
-            onPress={() => {
-              // Handle subscription
-              setShowPlanModal(false);
-            }}
+            onPress={handleSubscribe}
           >
             <Text style={styles.subscribeBtnText}>
-              {CURRENT_MEMBERSHIP.hasMembership
+              {membership && membership.hasMembership
                 ? "Change Plan"
                 : "Subscribe Now"}
             </Text>
@@ -387,7 +439,7 @@ export default function GymScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Gym</Text>
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <TouchableOpacity
             style={styles.manageMembershipBtn}
             onPress={() => setShowPlanModal(true)}
@@ -402,7 +454,7 @@ export default function GymScreen() {
         {renderMembershipCard()}
 
         {/* Membership Actions */}
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={styles.actionBtn}
@@ -432,7 +484,7 @@ export default function GymScreen() {
         )}
 
         {/* Gym Stats */}
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <>
             <Text style={styles.sectionTitle}>Your Stats</Text>
             <View style={styles.statsContainer}>
@@ -442,9 +494,7 @@ export default function GymScreen() {
                   size={28}
                   color="#F59E0B"
                 />
-                <Text style={styles.statValue}>
-                  {CURRENT_MEMBERSHIP.checkIns}
-                </Text>
+                <Text style={styles.statValue}>{membership.checkIns}</Text>
                 <Text style={styles.statLabel}>Total Visits</Text>
               </View>
               <View style={styles.statCard}>

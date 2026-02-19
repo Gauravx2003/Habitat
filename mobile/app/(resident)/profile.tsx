@@ -1,31 +1,43 @@
-import React from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  Image,
   StyleSheet,
   Alert,
+  Animated,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useSelector } from "react-redux";
+import { getProfile, Profile } from "@/src/services/profile.service";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
 
-  // Dummy Data (Replace with Redux user later if you want)
-  const student = {
-    name: "Gaurav Daware",
-    id: "2022-CS-045",
-    branch: "Computer Science",
-    year: "Final Year",
-    room: "B-304",
-    email: "gaurav@college.edu",
-    phone: "+91 98765 43210",
+  const flipAnimation = useRef(new Animated.Value(0)).current;
+
+  const fetchData = async () => {
+    try {
+      const response = await getProfile();
+      setProfile(response);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -36,6 +48,58 @@ export default function ProfileScreen() {
         onPress: () => router.replace("/"), // Go back to Login
       },
     ]);
+  };
+
+  // Flip animation logic
+  const flipCard = () => {
+    Animated.spring(flipAnimation, {
+      toValue: isFlipped ? 0 : 1,
+      friction: 8,
+      tension: 10,
+      useNativeDriver: true,
+    }).start();
+    setIsFlipped(!isFlipped);
+  };
+
+  const frontInterpolate = flipAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
+
+  const backInterpolate = flipAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["180deg", "360deg"],
+  });
+
+  const frontAnimatedStyle = {
+    transform: [{ rotateY: frontInterpolate }],
+  };
+
+  const backAnimatedStyle = {
+    transform: [{ rotateY: backInterpolate }],
+  };
+
+  // Compute "Valid Up To" as 1 year from createdAt
+  const getValidUpTo = () => {
+    if (!profile?.createdAt) return "N/A";
+    const created = new Date(profile.createdAt);
+    created.setFullYear(created.getFullYear() + 1);
+    return created.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Format DOB nicely
+  const formatDOB = () => {
+    if (!profile?.dateOfBirth) return "N/A";
+    const dob = new Date(profile.dateOfBirth);
+    return dob.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const OptionRow = ({ icon, label, isDestructive = false }: any) => (
@@ -66,56 +130,131 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
       >
-        {/* 1. DIGITAL ID CARD */}
-        <View style={styles.idCard}>
-          <View style={styles.idHeader}>
-            <View style={styles.collegeLogo}>
-              <Feather name="award" size={24} color="white" />
+        {/* 1. FLIPPING DIGITAL ID CARD */}
+        <Pressable onPress={flipCard} style={styles.cardContainer}>
+          {/* Front Side */}
+          <Animated.View
+            style={[styles.card, styles.cardFace, frontAnimatedStyle]}
+          >
+            {/* Card Header - Hostel & Organization */}
+            <View style={styles.idHeader}>
+              <View style={styles.collegeLogo}>
+                <Feather name="award" size={20} color="white" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.collegeOrg}>{profile?.organization}</Text>
+                <Text style={styles.collegeHostel}>{profile?.hostel}</Text>
+              </View>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>ACTIVE</Text>
+              </View>
             </View>
-            <Text style={styles.collegeName}>HABITAT UNIVERSITY</Text>
-          </View>
 
-          <View style={styles.idBody}>
-            <View style={styles.avatarPlaceholder}>
-              <Feather name="user" size={40} color="#CBD5E1" />
+            {/* Card Body - Profile pic, Name, Department */}
+            <View style={styles.idBody}>
+              <View style={styles.avatarPlaceholder}>
+                <Feather name="user" size={36} color="#94A3B8" />
+              </View>
+              <View style={styles.idDetails}>
+                <Text style={styles.studentName}>{profile?.name}</Text>
+                {profile?.departmentId && (
+                  <Text style={styles.studentId}>{profile.departmentId}</Text>
+                )}
+                {profile?.department && (
+                  <View style={styles.badgeRow}>
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{profile.department}</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
             </View>
-            <View style={styles.idDetails}>
-              <Text style={styles.studentName}>{student.name}</Text>
-              <Text style={styles.studentId}>{student.id}</Text>
-              <View style={styles.badgeRow}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{student.branch}</Text>
+
+            {/* Tap Hint */}
+            <View style={styles.tapHint}>
+              <Feather
+                name="refresh-cw"
+                size={14}
+                color="rgba(255,255,255,0.5)"
+              />
+              <Text style={styles.tapHintText}>Tap to flip</Text>
+            </View>
+          </Animated.View>
+
+          {/* Back Side */}
+          <Animated.View
+            style={[
+              styles.card,
+              styles.cardFace,
+              styles.cardBack,
+              backAnimatedStyle,
+            ]}
+          >
+            <View style={styles.cardBackHeader}>
+              <Feather name="info" size={18} color="#94A3B8" />
+              <Text style={styles.cardBackTitle}>RESIDENCE DETAILS</Text>
+            </View>
+
+            <View style={styles.cardBackContent}>
+              <View style={styles.cardBackRow}>
+                <View style={styles.cardBackItem}>
+                  <Text style={styles.cardBackLabel}>ROOM NUMBER</Text>
+                  <Text style={styles.cardBackValue}>
+                    {profile?.roomNumber || "N/A"}
+                  </Text>
+                </View>
+                <View style={styles.cardBackItem}>
+                  <Text style={styles.cardBackLabel}>BLOCK</Text>
+                  <Text style={styles.cardBackValue}>
+                    {profile?.block || "N/A"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.cardBackRow}>
+                <View style={styles.cardBackItem}>
+                  <Text style={styles.cardBackLabel}>ROOM TYPE</Text>
+                  <Text style={styles.cardBackValue}>
+                    {profile?.roomType || "N/A"}
+                  </Text>
+                </View>
+                <View style={styles.cardBackItem}>
+                  <Text style={styles.cardBackLabel}>DATE OF BIRTH</Text>
+                  <Text style={styles.cardBackValue}>{formatDOB()}</Text>
+                </View>
+              </View>
+
+              <View style={styles.cardBackRow}>
+                <View style={styles.cardBackItem}>
+                  <Text style={styles.cardBackLabel}>VALID UP TO</Text>
+                  <Text style={[styles.cardBackValue, { color: "#22C55E" }]}>
+                    {getValidUpTo()}
+                  </Text>
                 </View>
               </View>
             </View>
-          </View>
 
-          <View style={styles.idFooter}>
-            <View>
-              <Text style={styles.footerLabel}>ROOM NO</Text>
-              <Text style={styles.footerValue}>{student.room}</Text>
-            </View>
-            <View>
-              <Text style={styles.footerLabel}>VALID UPTO</Text>
-              <Text style={styles.footerValue}>Mar 2026</Text>
-            </View>
-            <View>
-              <Text style={styles.footerLabel}>DOB</Text>
-              <Text style={styles.footerValue}>01/01/2004</Text>
-            </View>
-          </View>
-        </View>
+            {/* <View style={styles.tapHint}>
+              <Feather
+                name="refresh-cw"
+                size={14}
+                color="rgba(255,255,255,0.5)"
+              />
+              <Text style={styles.tapHintText}>Tap to flip back</Text>
+            </View> */}
+          </Animated.View>
+        </Pressable>
 
         {/* 2. PERSONAL INFO SECTION */}
         <Text style={styles.sectionTitle}>Personal Information</Text>
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue}>{student.email}</Text>
+            <Text style={styles.infoValue}>{profile?.email}</Text>
           </View>
           <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue}>{student.phone}</Text>
+            <Text style={styles.infoValue}>+91 {profile?.phone}</Text>
           </View>
         </View>
 
@@ -159,73 +298,149 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // ID Card
-  idCard: {
+  // Flip Card Container
+  cardContainer: { marginBottom: 24 },
+  card: {
     backgroundColor: "#1E293B",
     borderRadius: 20,
-    overflow: "hidden",
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
+    padding: 20,
+    minHeight: 200,
+    justifyContent: "space-between",
+    shadowColor: "#1E293B",
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
   },
+  cardFace: {
+    backfaceVisibility: "hidden",
+  },
+  cardBack: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+
+  // Front Side
   idHeader: {
-    backgroundColor: "#0F172A",
-    padding: 16,
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 16,
   },
   collegeLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(59,130,246,0.3)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  collegeName: {
+  collegeOrg: {
     color: "white",
-    fontWeight: "bold",
+    fontWeight: "800",
     letterSpacing: 1,
-    fontSize: 12,
+    fontSize: 11,
   },
-  idBody: { padding: 20, flexDirection: "row", alignItems: "center" },
+  collegeHostel: {
+    color: "#94A3B8",
+    fontWeight: "600",
+    fontSize: 10,
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  statusBadge: {
+    backgroundColor: "#22C55E",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusText: {
+    color: "white",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  idBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#334155",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#475569",
   },
-  idDetails: { marginLeft: 16 },
+  idDetails: { marginLeft: 16, flex: 1 },
   studentName: { color: "white", fontSize: 20, fontWeight: "bold" },
-  studentId: { color: "#94A3B8", fontSize: 14, marginTop: 2, marginBottom: 8 },
+  studentId: {
+    color: "#CBD5E1",
+    fontSize: 13,
+    marginTop: 2,
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
   badgeRow: { flexDirection: "row" },
   badge: {
     backgroundColor: "#3B82F6",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   badgeText: { color: "white", fontSize: 10, fontWeight: "bold" },
-  idFooter: {
+
+  tapHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+  },
+  tapHintText: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.5)",
+    marginLeft: 4,
+  },
+
+  // Back Side
+  cardBackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  cardBackTitle: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginLeft: 8,
+  },
+  cardBackContent: {
+    flex: 1,
+  },
+  cardBackRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 20,
-    paddingTop: 0,
+    marginBottom: 14,
   },
-  footerLabel: {
-    color: "#64748B",
-    fontSize: 10,
-    fontWeight: "bold",
-    marginBottom: 2,
+  cardBackItem: {
+    flex: 1,
   },
-  footerValue: { color: "white", fontSize: 12, fontWeight: "600" },
+  cardBackLabel: {
+    fontSize: 9,
+    color: "#94A3B8",
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  cardBackValue: {
+    fontSize: 16,
+    color: "white",
+    fontWeight: "700",
+  },
 
   // Info Card
   sectionTitle: {

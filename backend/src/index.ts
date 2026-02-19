@@ -15,7 +15,7 @@ import lostAndFoundRoutes from "./modules/lostAndFound/lostAndFound.routes";
 import lostFoundAttachmentsRoutes from "./modules/lostAndFound/lostFoundAttachments.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import { runEscalationJob } from "./jobs/escalation.job";
-import noticesRoutes from "./modules/notices/notices.routes";
+import campusHubRoutes from "./modules/campusHub/campusHub.routes";
 import gatePassRoutes from "./modules/gatePass/gatePass.routes";
 import visitorsRoutes from "./modules/visitors/visitors.routes";
 import messIssueRoutes from "./modules/messIssue/messIssue.routes";
@@ -25,6 +25,11 @@ import messAttachmentsRoutes from "./modules/messIssue/messAttachments.routes";
 import cron from "node-cron";
 import membershipsRoutes from "./modules/memberships/memberships.routes";
 import libraryRoutes from "./modules/library/library.routes";
+import attendanceRoutes from "./modules/attendance/attendance.routes";
+import campusHubAttachmentsRoutes from "./modules/campusHub/campusHubAttachments.routes";
+import smartMessRoutes from "./modules/smartMess/smartMess.routes";
+import userRoutes from "./modules/users/users.routes";
+import { startLibraryCron } from "./jobs/library.job";
 
 const app = express();
 
@@ -39,6 +44,8 @@ app.get("/health", (_req: Request, res: Response) => {
 //   runEscalationJob().catch(console.error);
 // });
 
+// startLibraryCron();
+
 app.use("/api/auth", authRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/complaints", complaintRoutes);
@@ -47,7 +54,8 @@ app.use("/api/complaints", attachmentsRoutes);
 app.use("/api/lost-and-found", lostAndFoundRoutes);
 app.use("/api/lost-and-found", lostFoundAttachmentsRoutes);
 app.use("/api/notifications", notificationsRoutes);
-app.use("/api/notices", noticesRoutes);
+app.use("/api/campus-hub", campusHubRoutes);
+app.use("/api/campus-hub", campusHubAttachmentsRoutes);
 app.use("/api/gate-pass", gatePassRoutes);
 app.use("/api/visitors", visitorsRoutes);
 app.use("/api/mess-issues", messIssueRoutes);
@@ -56,6 +64,9 @@ app.use("/api/user-creation", userCreationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/memberships", membershipsRoutes);
 app.use("/api/library", libraryRoutes);
+app.use("/api/attendance", attendanceRoutes);
+app.use("/api/smart-mess", smartMessRoutes);
+app.use("/api/users", userRoutes);
 
 const PORT = process.env.PORT || 5000;
 

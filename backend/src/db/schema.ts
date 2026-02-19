@@ -9,6 +9,7 @@ import {
   integer,
   pgEnum,
   numeric,
+  date,
 } from "drizzle-orm/pg-core";
 
 import { MESS_ISSUE_CATEGORIES } from "../../../shared/constants";
@@ -75,13 +76,21 @@ export const messIssueStatusEnum = pgEnum("mess_issue_status", [
 // ... existing imports
 
 // 1. Library Enums
-export const bookStatusEnum = pgEnum("book_status", [
-  "AVAILABLE",
-  "BORROWED",
-  "LOST",
-  "MAINTENANCE",
+export const bookInventoryStatusEnum = pgEnum("book_inventory_status", [
+  "ACTIVE", // Normal book, in circulation
+  "ARCHIVED", // Old syllabus, hidden from students
+  "MAINTENANCE", // Damaged, sent for binding
+  "LOST_FOREVER", // Gone from library entirely
 ]);
 
+// 2. For the TRANSACTION (Circulation)
+// This tracks the lifecycle of a student borrowing a book.
+export const transactionStatusEnum = pgEnum("transaction_status", [
+  "BORROWED", // Currently with student (On time)
+  "RETURNED", // Student gave it back
+  "OVERDUE", // Late (Fine starts accumulating)
+  "LOST_BY_USER", // Student lost it (Pay replacement cost)
+]);
 // 2. Smart Mess Enums
 export const mealTypeEnum = pgEnum("meal_type", [
   "BREAKFAST",
@@ -135,6 +144,20 @@ export const bookFormatEnum = pgEnum("book_format", [
   "AUDIOBOOK",
 ]);
 
+export const noticeTypeEnum = pgEnum("notice_type", [
+  "ANNOUNCEMENT", // "No Water", "Loud Noise Warning"
+  "SCHEDULE", // "Dhobi arriving", "Waste Collection"
+  "EMERGENCY", // "Fire Drill Now" (High Alert)
+]);
+
+export const eventCategoryEnum = pgEnum("event_category", [
+  "CULTURAL", // Garba, Diwali
+  "SPORTS", // Cricket Match
+  "WORKSHOP", // Coding bootcamp
+  "MEETUP", // General gathering
+  "OTHER",
+]);
+
 //Tables
 
 export const libraryBooks = pgTable("library_books", {
@@ -149,12 +172,15 @@ export const libraryBooks = pgTable("library_books", {
   isbn: varchar("isbn", { length: 50 }),
   coverUrl: text("cover_url"),
 
+  totalCopies: integer("total_copies").default(1).notNull(),
+  availableCopies: integer("available_copies").default(1).notNull(),
+
   // Digital Book Fields
   isDigital: boolean("is_digital").default(false),
   downloadUrl: text("download_url"), // Secure URL for PDF/EPUB
   format: bookFormatEnum("format").default("PHYSICAL"),
 
-  status: bookStatusEnum("status").default("AVAILABLE"),
+  status: bookInventoryStatusEnum("status").default("ACTIVE"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -171,7 +197,7 @@ export const libraryTransactions = pgTable("library_transactions", {
   dueDate: timestamp("due_date").notNull(),
   returnDate: timestamp("return_date"),
 
-  status: bookStatusEnum("status").default("BORROWED"),
+  status: transactionStatusEnum("status").default("BORROWED"),
 
   // Fine Logic
   fineAmount: integer("fine_amount").default(0),
@@ -225,13 +251,17 @@ export const messMenu = pgTable("mess_menu", {
     .references(() => hostels.id)
     .notNull(),
 
-  date: timestamp("date").notNull(),
-  mealType: mealTypeEnum("meal_type").notNull(),
+  date: timestamp("date").notNull(), // The date of the meal (e.g., Feb 18)
+  mealType: mealTypeEnum("meal_type").notNull(), // LUNCH, DINNER
 
-  items: text("items").notNull(), // "Paneer, Roti, Rice"
+  items: text("items").notNull(),
+
+  // --- NEW FIELDS ---
+  servingTime: timestamp("serving_time").notNull(), // e.g., Feb 18, 1:00 PM
+  cutoffTime: timestamp("cutoff_time").notNull(), // e.g., Feb 18, 11:00 AM
+
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 export const messAttendance = pgTable("mess_attendance", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -264,7 +294,6 @@ export const sosAlerts = pgTable("sos_alerts", {
 
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -324,6 +353,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull(),
   isActive: boolean("is_active").default(true),
+  pushToken: text("push_token"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -333,6 +363,10 @@ export const residentProfiles = pgTable("resident_profiles", {
     .primaryKey(),
   roomId: uuid("room_id").references(() => rooms.id),
   enrollmentNumber: varchar("enrollment_number", { length: 50 }),
+  phone: varchar("phone", { length: 15 }),
+  dateOfBirth: date("date_of_birth"),
+  department: varchar("department", { length: 50 }),
+  departmentId: varchar("department_id", { length: 20 }),
 });
 
 export const staffProfiles = pgTable("staff_profiles", {
@@ -462,13 +496,57 @@ export const escalations = pgTable("escalations", {
 
 export const notices = pgTable("notices", {
   id: uuid("id").defaultRandom().primaryKey(),
+  hostelId: uuid("hostel_id")
+    .references(() => hostels.id)
+    .notNull(),
+
+  title: varchar("title", { length: 255 }).notNull(), // "Dhobi is here"
+  description: text("description"), // "Collect clothes from Ground Floor"
+
+  type: noticeTypeEnum("type").default("ANNOUNCEMENT"),
+
+  // Critical for "Schedule" type notices
+  scheduledFor: timestamp("scheduled_for"), // e.g., "Today 5:00 PM"
+
+  isActive: boolean("is_active").default(true), // Admin can archive old notices
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const events = pgTable("events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  hostelId: uuid("hostel_id")
+    .references(() => hostels.id)
+    .notNull(),
+
   title: varchar("title", { length: 255 }).notNull(),
-  content: text("content").notNull(),
-  createdBy: uuid("created_by")
+  description: text("description").notNull(),
+  category: eventCategoryEnum("category").default("CULTURAL"),
+
+  bannerUrl: text("banner_url"), // Cloudinary Image
+
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+
+  location: varchar("location", { length: 100 }).default("Common Hall"),
+
+  // Enhancement: RSVP Logic
+  interestedCount: integer("interested_count").default(0),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const eventsAttachments = pgTable("events_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  eventId: uuid("event_id")
+    .references(() => events.id, { onDelete: "cascade" })
+    .notNull(),
+  uploadedBy: uuid("uploaded_by")
     .references(() => users.id)
     .notNull(),
+  fileURL: text("file_url").notNull(), //Cloudinary secure Url
+  publicId: text("public_id").notNull(), //Cloudinary Public ID
+
   createdAt: timestamp("created_at").defaultNow(),
-  expiresAt: timestamp("expires_at"),
 });
 
 export const lostAndFoundItems = pgTable("lost_and_found_items", {
@@ -642,4 +720,22 @@ export const gymMemberships = pgTable("gym_memberships", {
   paymentId: uuid("payment_id").references(() => payments.id),
 
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// In schema.ts
+
+export const attendanceLogs = pgTable("attendance_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id)
+    .notNull(),
+
+  scanTime: timestamp("scan_time").defaultNow().notNull(),
+  direction: varchar("direction", { length: 10 }).notNull(), // "IN" or "OUT"
+
+  qrTokenUsed: text("qr_token_used"), // Audit trail
+
+  // Optional: Store location for proof
+  latitude: numeric("latitude"),
+  longitude: numeric("longitude"),
 });

@@ -21,6 +21,7 @@ import LateEntryExitApproval from "./pages/admin/LateEntryExitApproval";
 import FinesAndPayments from "./pages/resident/FinesAndPayments";
 import FineManage from "./pages/admin/FineManage";
 import VisitorRequest from "./pages/resident/VisitorRequest";
+import CampusHub from "./pages/admin/CampusHub";
 
 const App = () => {
   return (
@@ -40,7 +41,7 @@ const App = () => {
           }
         >
           <Route index element={<AdminDashboard />} />
-          <Route path="notices" element={<NoticeList />} />
+          <Route path="campus-hub" element={<CampusHub />} />
           <Route path="escalations" element={<EscalatedComplaints />} />
           <Route path="lost-found" element={<LostFoundApprovals />} />
           <Route path="late-entry-exit" element={<LateEntryExitApproval />} />

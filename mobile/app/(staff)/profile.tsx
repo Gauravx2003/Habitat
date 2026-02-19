@@ -5,7 +5,9 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StyleSheet,
+  Alert,
 } from "react-native";
+import { authService } from "../../src/services/auth.service";
 import { useRouter } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
 import { Feather } from "@expo/vector-icons";
@@ -20,8 +22,22 @@ export default function ProfileScreen() {
   const user = useSelector((state: RootState) => state.auth.user);
 
   const handleLogout = () => {
-    dispatch(logout());
-    router.replace("/");
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await authService.logout();
+          } catch (e) {
+            console.log("Backend logout error:", e);
+          }
+          dispatch(logout());
+          router.replace("/");
+        },
+      },
+    ]);
   };
 
   return (

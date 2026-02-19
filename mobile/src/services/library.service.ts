@@ -1,0 +1,83 @@
+import { api } from "./api";
+
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  isbn?: string;
+  coverUrl?: string;
+  isDigital: boolean;
+  format: "PHYSICAL" | "EBOOK" | "AUDIOBOOK";
+  status: "AVAILABLE" | "BORROWED" | "LOST" | "MAINTENANCE";
+}
+
+export interface LibraryTransaction extends LibraryBook {
+  issueDate: string;
+  dueDate: string;
+  returnDate?: string;
+  fineAmount: number;
+  isFinePaid: boolean;
+  transactionStatus: "BORROWED" | "RETURNED" | "OVERDUE";
+}
+
+export interface LibraryService {
+  getAllBooks: () => Promise<LibraryBook[]>;
+  getMyBooks: (
+    status: "BORROWED" | "RETURNED" | "OVERDUE" | "ALL",
+  ) => Promise<LibraryTransaction[]>;
+  borrowBook: (bookId: string) => Promise<any>;
+  returnBook: (transactionId: string) => Promise<any>;
+  downloadBook: (bookId: string) => Promise<{ downloadUrl: string }>;
+}
+
+export const libraryService: LibraryService = {
+  getAllBooks: async () => {
+    try {
+      const response = await api.get("/library");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching library books:", error);
+      throw error;
+    }
+  },
+
+  getMyBooks: async (status) => {
+    try {
+      const response = await api.get(`/library/my?status=${status}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching my books:", error);
+      throw error;
+    }
+  },
+
+  borrowBook: async (bookId: string) => {
+    try {
+      const response = await api.post("/library/borrow", { bookId });
+      return response.data;
+    } catch (error) {
+      console.error("Error borrowing book:", error);
+      throw error;
+    }
+  },
+
+  returnBook: async (transactionId: string) => {
+    try {
+      const response = await api.post("/library/return", { transactionId });
+      return response.data;
+    } catch (error) {
+      console.error("Error returning book:", error);
+      throw error;
+    }
+  },
+
+  downloadBook: async (bookId: string) => {
+    try {
+      const response = await api.get(`/library/${bookId}/download`);
+      return response.data;
+    } catch (error) {
+      console.error("Error downloading book:", error);
+      throw error;
+    }
+  },
+};

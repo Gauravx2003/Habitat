@@ -9,8 +9,18 @@ import {
 } from "../../db/schema";
 import { eq, getTableColumns } from "drizzle-orm";
 import jwt from "jsonwebtoken";
+import redis from "../../config/redis";
+import { v4 as uuidv4 } from "uuid";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
+const REFRESH_SECRET =
+  process.env.REFRESH_SECRET || "some_super_secret_refresh_key";
+
+const generateTokens = (payload: any) => {
+  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "15m" }); // Short Life
+  const refreshToken = jwt.sign(payload, REFRESH_SECRET, { expiresIn: "7d" }); // Long Life
+  return { accessToken, refreshToken };
+};
 
 export const loginUser = async (email: string, password: string) => {
   const [user] = await db
@@ -37,19 +47,24 @@ export const loginUser = async (email: string, password: string) => {
     throw new Error("Invalid Credentials");
   }
 
-  const token = jwt.sign(
-    {
-      userId: user.id,
-      organizationId: user.organizationId,
-      role: user.role,
-      hostelId: user.hostelId,
-    },
-    JWT_SECRET,
-    { expiresIn: "8h" },
-  );
+  const sessionId = uuidv4();
+
+  const tokenPayload = {
+    userId: user.id,
+    organizationId: user.organizationId,
+    role: user.role,
+    hostelId: user.hostelId,
+    sessionId: sessionId,
+  };
+
+  const { accessToken, refreshToken } = generateTokens(tokenPayload);
+
+  const redisKey = `refresh_token:${user.id}:${sessionId}`;
+  await redis.set(redisKey, refreshToken, "EX", 7 * 24 * 60 * 60);
 
   return {
-    token,
+    accessToken,
+    refreshToken,
     user: {
       id: user.id,
       name: user.name,
@@ -63,4 +78,36 @@ export const loginUser = async (email: string, password: string) => {
       organizationId: user.organizationId,
     },
   };
+};
+
+export const refreshUserToken = async (incomingRefreshToken: string) => {
+  try {
+    // 1. Verify Signature
+    const decoded = jwt.verify(incomingRefreshToken, REFRESH_SECRET) as any;
+
+    // 2. Check Redis: Is this session still active?
+    const redisKey = `refresh_token:${decoded.userId}:${decoded.sessionId}`;
+    const storedToken = await redis.get(redisKey);
+
+    if (!storedToken || storedToken !== incomingRefreshToken) {
+      throw new Error("Invalid or Expired Refresh Token");
+    }
+
+    // 3. Generate NEW Access Token
+    const payload = {
+      userId: decoded.userId,
+      organizationId: decoded.organizationId,
+      role: decoded.role,
+      hostelId: decoded.hostelId,
+      sessionId: decoded.sessionId,
+    };
+
+    const newAccessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "15m" });
+
+    // Optional: You can also rotate the refresh token here for extra security
+
+    return { accessToken: newAccessToken };
+  } catch (error) {
+    throw new Error("Session expired, please login again");
+  }
 };

@@ -5,6 +5,7 @@ import {
   checkDigitalAccess,
   getAllBooks,
   returnBook,
+  getMyBooks,
 } from "./library.service";
 import { db } from "../../db";
 import { users } from "../../db/schema";
@@ -20,6 +21,24 @@ export const getBooksController = async (req: Authenticate, res: Response) => {
       return res.status(400).json({ message: "User not assigned to a hostel" });
     }
     const books = await getAllBooks(user.hostelId);
+    res.status(200).json(books);
+  } catch (err) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const getMyBooksController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  const status = req.query.status as
+    | "BORROWED"
+    | "RETURNED"
+    | "OVERDUE"
+    | "ALL";
+
+  try {
+    const books = await getMyBooks(req.user!.userId, status);
     res.status(200).json(books);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });

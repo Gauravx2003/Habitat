@@ -18,35 +18,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
 
-import { messService, MessIssue } from "../../src/services/mess.service";
+import {
+  messService,
+  MessIssue,
+  MessMenu,
+} from "../../src/services/mess.service";
 
 const { width } = Dimensions.get("window");
 
 // ... (Menu Data kept same)
-const TODAY_MENU = [
-  {
-    type: "Breakfast",
-    time: "07:30 - 09:30",
-    items: "Aloo Paratha, Curd, Tea/Coffee",
-  },
-  {
-    type: "Lunch",
-    time: "12:30 - 02:30",
-    items: "Rice, Dal Fry, Paneer Butter Masala, Roti, Salad",
-  },
-  { type: "Snacks", time: "17:00 - 18:00", items: "Samosa, Masala Tea" },
-  {
-    type: "Dinner",
-    time: "19:30 - 21:30",
-    items: "Veg Pulao, Mix Veg Curry, Roti, Kheer",
-  },
-];
+// Removed static TODAY_MENU
 
 export default function MessScreen() {
   // Tabs
   const [activeTab, setActiveTab] = useState<"menu" | "issues">("menu");
 
   // State
+  const [menu, setMenu] = useState<MessMenu[]>([]);
+  const [loadingMenu, setLoadingMenu] = useState(true);
   const [isEating, setIsEating] = useState(false);
   const [activeMeal, setActiveMeal] = useState("Lunch");
 
@@ -62,13 +51,31 @@ export default function MessScreen() {
   const [complaintDesc, setComplaintDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // QR Token Generation
-  const qrToken = JSON.stringify({
-    userId: "STU-123",
-    date: new Date().toISOString().split("T")[0],
-    meal: activeMeal,
-    status: "APPROVED",
+  // State for Opt-In interaction
+  const [optingIn, setOptingIn] = useState(false);
+
+  // Determine Active Meal for the Big Card
+  // Logic: First meal that hasn't ended.
+  // We can benefit from the logic used in the list, but let's re-calculate cleanly.
+  const activeMealIndex = menu.findIndex((m) => {
+    const sTime = new Date(m.servingTime);
+    const eTime = new Date(sTime);
+    eTime.setHours(sTime.getHours() + 2);
+    return new Date() < eTime;
   });
+
+  // If no upcoming meal (end of day), maybe show the last one or empty?
+  // Let's show the first upcoming, or the last one if all done.
+  const targetMeal =
+    activeMealIndex !== -1
+      ? menu[activeMealIndex]
+      : menu.length > 0
+        ? menu[menu.length - 1]
+        : null;
+
+  const isOptedIn =
+    targetMeal?.status === "OPTED_IN" || targetMeal?.status === "SCANNED";
+  const qrToken = targetMeal?.qrToken || "";
 
   const fetchIssues = useCallback(async () => {
     try {
@@ -83,15 +90,91 @@ export default function MessScreen() {
     }
   }, []);
 
+  const fetchMenu = useCallback(async () => {
+    try {
+      setLoadingMenu(true);
+      const data = await messService.getDailyMenu();
+      setMenu(data);
+
+      // Determine active meal based on time (optional improvement for later)
+    } catch (error) {
+      console.error("Failed to fetch menu", error);
+      Alert.alert("Error", "Failed to load menu");
+    } finally {
+      setLoadingMenu(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMenu();
+  }, [fetchMenu]);
+
   useEffect(() => {
     if (activeTab === "issues") {
       fetchIssues();
     }
   }, [activeTab, fetchIssues]);
 
+  const handleOptInToggle = async (val: boolean) => {
+    if (!targetMeal) return;
+
+    // Toggle OFF -> Opt-Out
+    if (!val) {
+      // Logic for Cancellation
+      // We can check cutoff locally for instant feedback, but backend is source of truth.
+      // Let's try to cancel via API.
+
+      Alert.alert(
+        "Cancel Booking?",
+        "Are you sure you want to cancel this meal?",
+        [
+          { text: "No", style: "cancel" },
+          {
+            text: "Yes, Cancel",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setOptingIn(true);
+                await messService.optOutForMeal(targetMeal.id);
+                await fetchMenu(); // Refresh state
+                Alert.alert("Cancelled", "Meal booking cancelled.");
+              } catch (err: any) {
+                Alert.alert(
+                  "Failed",
+                  err.response?.data?.message || "Could not cancel booking",
+                );
+                // Revert switch visually if needed, but state comes from prop/menu so fetchMenu handles it.
+              } finally {
+                setOptingIn(false);
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    // Toggle ON -> Opt-In
+    try {
+      setOptingIn(true);
+      await messService.optInForMeal(targetMeal.id);
+      await fetchMenu();
+      Alert.alert("Success", "Meal booked successfully! 🍔");
+    } catch (err: any) {
+      Alert.alert(
+        "Failed",
+        err.response?.data?.message || "Could not book meal",
+      );
+    } finally {
+      setOptingIn(false);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
-    fetchIssues();
+    fetchMenu();
+    if (activeTab === "issues") fetchIssues();
   };
 
   const handleSubmitComplaint = async () => {
@@ -272,80 +355,228 @@ export default function MessScreen() {
         >
           {/* Digital Coupon Card */}
           <View style={styles.ticketCard}>
-            <View style={styles.ticketHeader}>
-              <View>
-                <Text style={styles.ticketLabel}>UPCOMING MEAL</Text>
-                <Text style={styles.ticketMeal}>{activeMeal}</Text>
-              </View>
-              <View style={styles.liveBadge}>
-                <View style={styles.dot} />
-                <Text style={styles.liveText}>LIVE NOW</Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.ticketBody}>
-              {isEating ? (
-                <View style={styles.qrContainer}>
-                  <QRCode value={qrToken} size={160} />
-                  <Text style={styles.qrText}>Scan at Counter</Text>
+            {targetMeal ? (
+              <>
+                <View style={styles.ticketHeader}>
+                  <View>
+                    <Text style={styles.ticketLabel}>UPCOMING MEAL</Text>
+                    <Text style={styles.ticketMeal}>{targetMeal.mealType}</Text>
+                    <Text
+                      style={{ color: "#64748B", fontSize: 12, marginTop: 4 }}
+                    >
+                      {new Date(targetMeal.servingTime).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                    </Text>
+                  </View>
+                  <View style={styles.liveBadge}>
+                    <View style={styles.dot} />
+                    <Text style={styles.liveText}>
+                      {activeMealIndex !== -1 &&
+                      new Date() >= new Date(targetMeal.servingTime)
+                        ? "LIVE NOW"
+                        : "UPCOMING"}
+                    </Text>
+                  </View>
                 </View>
-              ) : (
-                <View style={styles.optInContainer}>
-                  <Feather name="slash" size={50} color="#CBD5E1" />
-                  <Text style={styles.optInText}>
-                    You have not opted in yet.
-                  </Text>
-                  <Text style={styles.optInSubText}>
-                    Toggle below to generate coupon.
-                  </Text>
-                </View>
-              )}
-            </View>
 
-            <View style={styles.ticketFooter}>
-              <Text style={styles.footerText}>Will you be eating?</Text>
-              <Switch
-                trackColor={{ false: "#767577", true: "#4ADE80" }}
-                thumbColor={isEating ? "#ffffff" : "#f4f3f4"}
-                onValueChange={() => setIsEating(!isEating)}
-                value={isEating}
-              />
-            </View>
+                <View style={styles.divider} />
+
+                <View style={styles.ticketBody}>
+                  {isOptedIn ? (
+                    <View style={styles.qrContainer}>
+                      {qrToken ? (
+                        <QRCode value={qrToken} size={160} />
+                      ) : (
+                        <ActivityIndicator color="#2563EB" />
+                      )}
+                      <Text style={styles.qrText}>Scan at Counter</Text>
+                      {targetMeal.status === "SCANNED" && (
+                        <View
+                          style={{
+                            marginTop: 10,
+                            flexDirection: "row",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Feather
+                            name="check-circle"
+                            size={16}
+                            color="#16A34A"
+                          />
+                          <Text
+                            style={{
+                              color: "#16A34A",
+                              fontWeight: "700",
+                              marginLeft: 4,
+                            }}
+                          >
+                            Claimed
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.optInContainer}>
+                      <Feather name="slash" size={50} color="#CBD5E1" />
+                      <Text style={styles.optInText}>
+                        You have not opted in yet.
+                      </Text>
+                      <Text style={styles.optInSubText}>
+                        Toggle below to generate coupon.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.ticketFooter}>
+                  <Text style={styles.footerText}>
+                    {isOptedIn ? "Enjoy your meal!" : "Will you be eating?"}
+                  </Text>
+                  {optingIn ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Switch
+                      trackColor={{ false: "#767577", true: "#4ADE80" }}
+                      thumbColor={isOptedIn ? "#ffffff" : "#f4f3f4"}
+                      onValueChange={handleOptInToggle}
+                      value={isOptedIn}
+                      disabled={
+                        optingIn ||
+                        targetMeal.status === "SCANNED" ||
+                        new Date() > new Date(targetMeal.cutoffTime)
+                      }
+                    />
+                  )}
+                </View>
+              </>
+            ) : (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <Text style={{ color: "#94A3B8" }}>
+                  No upcoming meals found.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Menu List */}
           <Text style={styles.sectionTitle}>Today's Menu</Text>
-          {TODAY_MENU.map((meal, index) => (
-            <View key={index} style={styles.menuCard}>
-              <View style={styles.menuHeader}>
-                <View style={styles.menuIconBox}>
-                  <Feather
-                    name={
-                      meal.type === "Breakfast"
-                        ? "sun"
-                        : meal.type === "Lunch"
-                          ? "sun"
-                          : "moon"
-                    }
-                    size={18}
-                    color="white"
-                  />
-                </View>
-                <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={styles.menuType}>{meal.type}</Text>
-                  <Text style={styles.menuTime}>{meal.time}</Text>
-                </View>
-                {meal.type === activeMeal && (
-                  <View style={styles.activeTag}>
-                    <Text style={styles.activeTagText}>NEXT</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.menuItems}>{meal.items}</Text>
+
+          {loadingMenu ? (
+            <ActivityIndicator
+              size="large"
+              color="#B91C1C"
+              style={{ marginTop: 20 }}
+            />
+          ) : menu.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Feather name="coffee" size={48} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No menu available for today.</Text>
             </View>
-          ))}
+          ) : (
+            menu.map((meal, index) => {
+              // Parse Serving Time
+              const servingTime = new Date(meal.servingTime);
+              const endTime = new Date(servingTime);
+              endTime.setHours(servingTime.getHours() + 2); // Assuming 2 hours serving window
+
+              const now = new Date();
+
+              // Formatting
+              const timeString = servingTime.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              });
+              const displayType =
+                meal.mealType.charAt(0) + meal.mealType.slice(1).toLowerCase();
+
+              // Logic for Status
+              let status: "ONGOING" | "NEXT" | null = null;
+
+              const isOngoing = now >= servingTime && now <= endTime;
+              const isFuture = now < servingTime;
+
+              // Check if previous meals are processed... map doesn't easily allow cross-item state
+              // Better approach: Calculate "Active Index" outside the map?
+              // Inside map:
+              // If this meal is ongoing -> ONGOING
+              // If this meal is future AND no previous meal was marked NEXT AND no previously processed meal was ONGOING?
+              // Actually, simply:
+              // Find the FIRST meal that has NOT ended (endTime > now).
+              // If that meal's startTime <= now -> ONGOING
+              // Else -> NEXT
+
+              // But we are inside map.
+              // We can check the menu array directly using index.
+
+              // Find the index of the "current/next" meal
+              const activeMealIndex = menu.findIndex((m) => {
+                const sTime = new Date(m.servingTime);
+                const eTime = new Date(sTime);
+                eTime.setHours(sTime.getHours() + 2);
+                return new Date() < eTime;
+              });
+
+              if (index === activeMealIndex) {
+                if (now >= servingTime) {
+                  status = "ONGOING";
+                } else {
+                  status = "NEXT";
+                }
+              }
+
+              return (
+                <View key={index} style={styles.menuCard}>
+                  <View style={styles.menuHeader}>
+                    <View style={styles.menuIconBox}>
+                      <Feather
+                        name={
+                          meal.mealType === "BREAKFAST"
+                            ? "sun"
+                            : meal.mealType === "LUNCH"
+                              ? "sun"
+                              : "moon"
+                        }
+                        size={18}
+                        color="white"
+                      />
+                    </View>
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={styles.menuType}>{displayType}</Text>
+                      <Text style={styles.menuTime}>
+                        Serves at {timeString}
+                      </Text>
+                    </View>
+
+                    {status === "ONGOING" && (
+                      <View
+                        style={[
+                          styles.activeTag,
+                          { backgroundColor: "#DCFCE7" },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.activeTagText, { color: "#16A34A" }]}
+                        >
+                          ONGOING
+                        </Text>
+                      </View>
+                    )}
+
+                    {status === "NEXT" && (
+                      <View style={styles.activeTag}>
+                        <Text style={styles.activeTagText}>NEXT</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.menuItems}>{meal.items}</Text>
+                </View>
+              );
+            })
+          )}
         </ScrollView>
       ) : (
         renderIssuesList()

@@ -16,11 +16,18 @@ export interface LoggedInUser {
 
 export const login = async (email: string, password: string) => {
   const response = await api.post("/auth/login", { email, password });
-  console.log("response ", response);
-  localStorage.setItem("token", response.data.token);
-  localStorage.setItem("user", JSON.stringify(response.data.user));
+
+  // Destructure the NEW response format from backend
+  const { user, accessToken, refreshToken } = response.data;
+
+  // Save to Local Storage
+  localStorage.setItem("token", accessToken); // Save 'accessToken' as 'token' key
+  localStorage.setItem("refreshToken", refreshToken);
+  localStorage.setItem("user", JSON.stringify(user));
+
   return {
-    user: response.data.user as LoggedInUser,
-    token: response.data.token as string,
+    user: user as LoggedInUser,
+    token: accessToken as string,
+    refreshToken: refreshToken as string,
   };
 };

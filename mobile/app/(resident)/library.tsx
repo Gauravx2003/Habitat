@@ -13,115 +13,78 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import {
+  membershipService,
+  Membership,
+  Plan,
+} from "../../src/services/membership.service";
+import {
+  libraryService,
+  LibraryTransaction,
+  LibraryBook,
+} from "../../src/services/library.service";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 // Dummy Data
-const MEMBERSHIP_PLANS = [
-  {
-    id: "1",
-    name: "Basic Access",
-    tier: "BRONZE",
-    price: 0,
-    duration: "MONTHLY",
-    maxBooks: 2,
-    finePerDay: 5,
-    features: ["2 books at a time", "₹5/day late fine", "Physical books only"],
-    color: "#CD7F32",
-  },
-  {
-    id: "2",
-    name: "Scholar Pack",
-    tier: "SILVER",
-    price: 500,
-    duration: "HALF_YEARLY",
-    maxBooks: 5,
-    finePerDay: 2,
-    features: [
-      "5 books at a time",
-      "₹2/day late fine",
-      "Digital library access",
-      "Priority borrowing",
-    ],
-    color: "#C0C0C0",
-  },
-  {
-    id: "3",
-    name: "Premium",
-    tier: "GOLD",
-    price: 1500,
-    duration: "YEARLY",
-    maxBooks: 10,
-    finePerDay: 0,
-    features: [
-      "10 books at a time",
-      "No late fines",
-      "Digital library access",
-      "Priority borrowing",
-      "Extended loan period",
-    ],
-    color: "#FFD700",
-  },
-];
+const getPlanDisplayInfo = (plan: Plan) => {
+  const name = plan.name.toLowerCase();
+  if (name.includes("basic") || name.includes("bronze")) {
+    return {
+      tier: "BRONZE",
+      color: "#CD7F32",
+      features: [
+        `${plan.maxBooksAllowed || 2} books at a time`,
+        `₹${plan.finePerDay || 5}/day late fine`,
+        "Physical books only",
+      ],
+    };
+  } else if (name.includes("silver") || name.includes("scholar")) {
+    return {
+      tier: "SILVER",
+      color: "#C0C0C0",
+      features: [
+        `${plan.maxBooksAllowed || 5} books at a time`,
+        `₹${plan.finePerDay || 2}/day late fine`,
+        "Digital library access",
+        "Priority borrowing",
+      ],
+    };
+  } else {
+    return {
+      tier: "GOLD",
+      color: "#FFD700",
+      features: [
+        `${plan.maxBooksAllowed || 10} books at a time`,
+        plan.finePerDay === 0
+          ? "No late fines"
+          : `₹${plan.finePerDay}/day fine`,
+        "Digital library access",
+        "Priority borrowing",
+        "Extended loan period",
+      ],
+    };
+  }
+};
 
-const BORROWED_BOOKS = [
-  {
-    id: "1",
-    title: "Clean Architecture",
-    author: "Robert Martin",
-    dueDate: "2026-02-20",
-    borrowDate: "2026-02-06",
-    isOverdue: false,
-  },
-  {
-    id: "2",
-    title: "Intro to Algorithms",
-    author: "Cormen",
-    dueDate: "2026-02-10",
-    borrowDate: "2026-01-27",
-    isOverdue: true,
-  },
-];
+// MEMBERSHIP_PLANS removed
 
-const DIGITAL_BOOKS = [
-  {
-    id: "d1",
-    title: "The Pragmatic Programmer",
-    author: "Andrew Hunt",
-    format: "EBOOK",
-    size: "2.4 MB",
-  },
-  {
-    id: "d2",
-    title: "You Don't Know JS",
-    author: "Kyle Simpson",
-    format: "EBOOK",
-    size: "1.8 MB",
-  },
-];
+// BORROWED_BOOKS removed
 
-const HISTORY_BOOKS = [
-  {
-    id: "3",
-    title: "React Native in Action",
-    author: "Dabit",
-    returnDate: "Jan 20, 2026",
-  },
-  {
-    id: "4",
-    title: "The Pragmatic Programmer",
-    author: "Andy Hunt",
-    returnDate: "Dec 15, 2025",
-  },
-];
+// DIGITAL_BOOKS removed
+
+// HISTORY_BOOKS removed
 
 // Mock current membership status
-const CURRENT_MEMBERSHIP = {
-  hasMembership: true,
-  plan: MEMBERSHIP_PLANS[1], // Silver plan
-  startDate: "Aug 15, 2022",
-  endDate: "Feb 15, 2026",
-  status: "ACTIVE", // ACTIVE, EXPIRED, CANCELLED
-  totalBorrowed: 24,
-  currentBorrowed: 2,
+// Mock current membership status (FALLBACK if fetch fails, but state will control this)
+const DUMMY_MEMBERSHIP = {
+  hasMembership: false,
+  status: "EXPIRED",
+  plan: null,
+  startDate: "",
+  endDate: "",
+  totalBorrowed: 0,
+  currentBorrowed: 0,
   fineBalance: 0,
 };
 
@@ -130,7 +93,94 @@ export default function LibraryScreen() {
   const [showDigitalLibrary, setShowDigitalLibrary] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [membership, setMembership] = useState<any>(null); // Extended Membership type
+  const [myBooks, setMyBooks] = useState<LibraryTransaction[]>([]);
+  const [digitalBooks, setDigitalBooks] = useState<LibraryBook[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [fetchedPlans, myMemberships, fetchedBooks, allLibraryBooks] =
+        await Promise.all([
+          membershipService.getLibraryPlans(),
+          membershipService.getMyMemberships(),
+          libraryService.getMyBooks("ALL"),
+          libraryService.getAllBooks(),
+        ]);
+      setPlans(fetchedPlans);
+      setMyBooks(fetchedBooks);
+      setDigitalBooks(allLibraryBooks.filter((b) => b.isDigital));
+
+      const activeLibMem = myMemberships.library.find(
+        (m) => m.status === "ACTIVE",
+      );
+      if (activeLibMem) {
+        // Hydrate with plan details
+        const planDetails = fetchedPlans.find(
+          (p) => p.name === activeLibMem.planName,
+        );
+        const displayInfo = planDetails ? getPlanDisplayInfo(planDetails) : {};
+        setMembership({
+          ...activeLibMem,
+          hasMembership: true,
+          plan: { ...planDetails, ...displayInfo },
+          endDate: new Date(activeLibMem.endDate).toDateString(),
+          // Dummies for now
+          totalBorrowed: 24,
+          currentBorrowed: fetchedBooks.filter(
+            (b) =>
+              b.transactionStatus === "BORROWED" ||
+              b.transactionStatus === "OVERDUE",
+          ).length,
+          fineBalance: fetchedBooks.reduce((acc, b) => acc + b.fineAmount, 0),
+        });
+      } else {
+        setMembership(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch library data", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, []),
+  );
+
+  const handleSubscribe = async () => {
+    if (!selectedPlan) return;
+    try {
+      await membershipService.subscribeToPlan(selectedPlan.id, "LIBRARY");
+      // Ideally show success/payment flow. For now just refresh or close.
+      setShowPlanModal(false);
+      fetchData(); // Refresh to see PENDING status or logic
+      alert("Subscription request sent! Please complete payment.");
+    } catch (error) {
+      alert("Failed to subscribe");
+    }
+  };
+
+  const handleDownload = async (book: LibraryBook) => {
+    try {
+      const { downloadUrl } = await libraryService.downloadBook(book.id);
+      if (downloadUrl) {
+        // In a real app, use Linking.openURL or FileSystem.downloadAsync
+        alert(`Opening ${book.title}...`);
+        console.log("Downloading from:", downloadUrl);
+      } else {
+        alert("Download link not available");
+      }
+    } catch (error: any) {
+      alert(error.message || "Failed to download book");
+    }
+  };
+
   const flipAnimation = useRef(new Animated.Value(0)).current;
 
   const flipCard = () => {
@@ -161,19 +211,29 @@ export default function LibraryScreen() {
     transform: [{ rotateY: backInterpolate }],
   };
 
-  const borrowedBooks = BORROWED_BOOKS.filter((b) => !b.isOverdue);
-  const overdueBooks = BORROWED_BOOKS.filter((b) => b.isOverdue);
+  const borrowedBooks = myBooks.filter(
+    (b) =>
+      b.transactionStatus === "BORROWED" && new Date(b.dueDate) >= new Date(),
+  );
+  const overdueBooks = myBooks.filter(
+    (b) =>
+      b.transactionStatus === "OVERDUE" ||
+      (b.transactionStatus === "BORROWED" && new Date(b.dueDate) < new Date()),
+  );
+  const historyBooks = myBooks.filter(
+    (b) => b.transactionStatus === "RETURNED",
+  );
 
-  const getDaysUntilDue = (dueDate) => {
+  const getDaysUntilDue = (dueDate: string) => {
     const due = new Date(dueDate);
     const today = new Date();
-    const diffTime = due - today;
+    const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
 
   const renderMembershipCard = () => {
-    if (!CURRENT_MEMBERSHIP.hasMembership) {
+    if (!membership || !membership.hasMembership) {
       return (
         <View style={styles.noMembershipCard}>
           <Feather name="book-open" size={40} color="#94A3B8" />
@@ -191,8 +251,8 @@ export default function LibraryScreen() {
       );
     }
 
-    const plan = CURRENT_MEMBERSHIP.plan;
-    const isActive = CURRENT_MEMBERSHIP.status === "ACTIVE";
+    const plan = membership.plan;
+    const isActive = membership.status === "ACTIVE";
 
     return (
       <Pressable onPress={flipCard} style={styles.cardContainer}>
@@ -228,9 +288,7 @@ export default function LibraryScreen() {
                   },
                 ]}
               >
-                <Text style={styles.statusText}>
-                  {CURRENT_MEMBERSHIP.status}
-                </Text>
+                <Text style={styles.statusText}>{membership.status}</Text>
               </View>
             </View>
             <View style={styles.tapHint}>
@@ -266,9 +324,7 @@ export default function LibraryScreen() {
               </View>
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>VALID TILL</Text>
-                <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.endDate}
-                </Text>
+                <Text style={styles.cardBackValue}>{membership.endDate}</Text>
               </View>
             </View>
 
@@ -276,13 +332,13 @@ export default function LibraryScreen() {
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>BOOKS BORROWED</Text>
                 <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.totalBorrowed} total
+                  {membership.totalBorrowed} total
                 </Text>
               </View>
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>CURRENT</Text>
                 <Text style={styles.cardBackValue}>
-                  {CURRENT_MEMBERSHIP.currentBorrowed}/{plan.maxBooks}
+                  {membership.currentBorrowed}/{plan.maxBooks || 2}
                 </Text>
               </View>
             </View>
@@ -294,19 +350,18 @@ export default function LibraryScreen() {
                   style={[
                     styles.cardBackValue,
                     {
-                      color:
-                        CURRENT_MEMBERSHIP.fineBalance > 0
-                          ? "#EF4444"
-                          : "#22C55E",
+                      color: membership.fineBalance > 0 ? "#EF4444" : "#22C55E",
                     },
                   ]}
                 >
-                  ₹{CURRENT_MEMBERSHIP.fineBalance}
+                  ₹{membership.fineBalance}
                 </Text>
               </View>
               <View style={styles.cardBackItem}>
                 <Text style={styles.cardBackLabel}>FINE/DAY</Text>
-                <Text style={styles.cardBackValue}>₹{plan.finePerDay}</Text>
+                <Text style={styles.cardBackValue}>
+                  ₹{plan.finePerDay || 0}
+                </Text>
               </View>
             </View>
           </View>
@@ -341,50 +396,54 @@ export default function LibraryScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {MEMBERSHIP_PLANS.map((plan) => (
-              <TouchableOpacity
-                key={plan.id}
-                style={[
-                  styles.planCard,
-                  selectedPlan?.id === plan.id && styles.planCardSelected,
-                ]}
-                onPress={() => setSelectedPlan(plan)}
-              >
-                <View style={styles.planHeader}>
-                  <View>
-                    <View
-                      style={[
-                        styles.planTierBadge,
-                        {
-                          backgroundColor: plan.color + "20",
-                          borderColor: plan.color,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.planTierText, { color: plan.color }]}
+            {plans.map((item) => {
+              const displayInfo = getPlanDisplayInfo(item);
+              const plan = { ...item, ...displayInfo };
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={[
+                    styles.planCard,
+                    selectedPlan?.id === plan.id && styles.planCardSelected,
+                  ]}
+                  onPress={() => setSelectedPlan(plan)}
+                >
+                  <View style={styles.planHeader}>
+                    <View>
+                      <View
+                        style={[
+                          styles.planTierBadge,
+                          {
+                            backgroundColor: plan.color + "20",
+                            borderColor: plan.color,
+                          },
+                        ]}
                       >
-                        {plan.tier}
-                      </Text>
+                        <Text
+                          style={[styles.planTierText, { color: plan.color }]}
+                        >
+                          {plan.tier}
+                        </Text>
+                      </View>
+                      <Text style={styles.planName}>{plan.name}</Text>
                     </View>
-                    <Text style={styles.planName}>{plan.name}</Text>
+                    <View style={styles.planPriceContainer}>
+                      <Text style={styles.planPrice}>₹{plan.price}</Text>
+                      <Text style={styles.planDuration}>/{plan.duration}</Text>
+                    </View>
                   </View>
-                  <View style={styles.planPriceContainer}>
-                    <Text style={styles.planPrice}>₹{plan.price}</Text>
-                    <Text style={styles.planDuration}>/{plan.duration}</Text>
-                  </View>
-                </View>
 
-                <View style={styles.planFeatures}>
-                  {plan.features.map((feature, idx) => (
-                    <View key={idx} style={styles.featureRow}>
-                      <Feather name="check" size={16} color="#22C55E" />
-                      <Text style={styles.featureText}>{feature}</Text>
-                    </View>
-                  ))}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <View style={styles.planFeatures}>
+                    {plan.features.map((feature, idx) => (
+                      <View key={idx} style={styles.featureRow}>
+                        <Feather name="check" size={16} color="#22C55E" />
+                        <Text style={styles.featureText}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           <TouchableOpacity
@@ -393,13 +452,10 @@ export default function LibraryScreen() {
               !selectedPlan && styles.subscribeBtnDisabled,
             ]}
             disabled={!selectedPlan}
-            onPress={() => {
-              // Handle subscription
-              setShowPlanModal(false);
-            }}
+            onPress={handleSubscribe}
           >
             <Text style={styles.subscribeBtnText}>
-              {CURRENT_MEMBERSHIP.hasMembership
+              {membership && membership.hasMembership
                 ? "Change Plan"
                 : "Subscribe Now"}
             </Text>
@@ -414,8 +470,9 @@ export default function LibraryScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Library</Text>
         <View style={styles.headerActions}>
-          {CURRENT_MEMBERSHIP.hasMembership &&
-            CURRENT_MEMBERSHIP.plan.tier !== "BRONZE" && (
+          {membership &&
+            membership.hasMembership &&
+            membership.plan.tier !== "BRONZE" && (
               <TouchableOpacity
                 style={styles.digitalLibraryBtn}
                 onPress={() => setShowDigitalLibrary(true)}
@@ -424,7 +481,7 @@ export default function LibraryScreen() {
                 <Text style={styles.digitalLibraryBtnText}>Digital</Text>
               </TouchableOpacity>
             )}
-          {CURRENT_MEMBERSHIP.hasMembership && (
+          {membership && membership.hasMembership && (
             <TouchableOpacity
               style={styles.manageMembershipBtn}
               onPress={() => setShowPlanModal(true)}
@@ -440,7 +497,7 @@ export default function LibraryScreen() {
         {renderMembershipCard()}
 
         {/* Membership Actions */}
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={styles.actionBtn}
@@ -468,7 +525,7 @@ export default function LibraryScreen() {
         )}
 
         {/* Search Bar */}
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <View style={styles.searchContainer}>
             <Feather name="search" size={20} color="#9CA3AF" />
             <TextInput
@@ -480,7 +537,7 @@ export default function LibraryScreen() {
         )}
 
         {/* Tabs */}
-        {CURRENT_MEMBERSHIP.hasMembership && (
+        {membership && membership.hasMembership && (
           <>
             <View style={styles.tabs}>
               <TouchableOpacity
@@ -561,7 +618,7 @@ export default function LibraryScreen() {
               {activeTab === "overdue" &&
                 overdueBooks.map((book) => {
                   const daysOverdue = Math.abs(getDaysUntilDue(book.dueDate));
-                  const fine = daysOverdue * CURRENT_MEMBERSHIP.plan.finePerDay;
+                  const fine = daysOverdue * (membership.plan.finePerDay || 5);
                   return (
                     <View key={book.id} style={styles.bookItem}>
                       <View
@@ -594,7 +651,7 @@ export default function LibraryScreen() {
                 })}
 
               {activeTab === "history" &&
-                HISTORY_BOOKS.map((book) => (
+                historyBooks.map((book) => (
                   <View
                     key={book.id}
                     style={[styles.bookItem, { opacity: 0.7 }]}
@@ -608,7 +665,10 @@ export default function LibraryScreen() {
                       <Text style={styles.bookTitle}>{book.title}</Text>
                       <Text style={styles.bookAuthor}>{book.author}</Text>
                       <Text style={styles.bookReturned}>
-                        Returned: {book.returnDate}
+                        Returned:{" "}
+                        {book.returnDate
+                          ? new Date(book.returnDate).toDateString()
+                          : "-"}
                       </Text>
                     </View>
                   </View>
@@ -647,10 +707,16 @@ export default function LibraryScreen() {
 
           <ScrollView style={styles.digitalLibraryContent}>
             <Text style={styles.sectionTitle}>Available E-Books</Text>
-            {DIGITAL_BOOKS.map((book) => (
+            {digitalBooks.map((book) => (
               <View key={book.id} style={styles.digitalBookCard}>
                 <View style={styles.digitalBookIcon}>
-                  <Feather name="file-text" size={32} color="#7C3AED" />
+                  <Feather
+                    name={
+                      book.format === "AUDIOBOOK" ? "headphones" : "file-text"
+                    }
+                    size={32}
+                    color="#7C3AED"
+                  />
                 </View>
                 <View style={styles.digitalBookInfo}>
                   <Text style={styles.digitalBookTitle}>{book.title}</Text>
@@ -659,14 +725,25 @@ export default function LibraryScreen() {
                     <View style={styles.formatBadge}>
                       <Text style={styles.formatText}>{book.format}</Text>
                     </View>
-                    <Text style={styles.digitalBookSize}>{book.size}</Text>
+                    {/* Size not in backend yet, hiding or dummy */}
+                    {/* <Text style={styles.digitalBookSize}>{book.size}</Text> */}
                   </View>
                 </View>
-                <TouchableOpacity style={styles.digitalDownloadBtn}>
+                <TouchableOpacity
+                  style={styles.digitalDownloadBtn}
+                  onPress={() => handleDownload(book)}
+                >
                   <Feather name="download" size={20} color="white" />
                 </TouchableOpacity>
               </View>
             ))}
+            {digitalBooks.length === 0 && (
+              <Text
+                style={{ textAlign: "center", marginTop: 20, color: "#64748B" }}
+              >
+                No digital books available.
+              </Text>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>

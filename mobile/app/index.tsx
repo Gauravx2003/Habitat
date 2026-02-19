@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
+import { authService } from "@/src/services/auth.service";
 import axios from "axios";
 import { useDispatch } from "react-redux";
 import { setCredentials } from "../src/store/authSlice";
@@ -37,15 +38,12 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        email,
-        password,
-      });
+      const response = await authService.login({ email, password });
 
-      const { user, token } = response.data;
+      const { user, accessToken, refreshToken } = response;
 
       // 1. Save to Redux
-      dispatch(setCredentials({ user, token }));
+      dispatch(setCredentials({ user, token: accessToken, refreshToken }));
 
       //2. Redirect based on Role
       if (user.role === "RESIDENT") {
