@@ -1,5 +1,10 @@
 import { db } from "../db";
-import { complaints, users, escalations } from "../db/schema";
+import {
+  complaints,
+  users,
+  escalations,
+  complaintStatusHistory,
+} from "../db/schema";
 import { eq, inArray, lt, and, sql } from "drizzle-orm";
 
 export const runEscalationJob = async () => {
@@ -30,6 +35,13 @@ export const runEscalationJob = async () => {
       .update(complaints)
       .set({ status: "ESCALATED" })
       .where(eq(complaints.id, complaint.id));
+
+    await db.insert(complaintStatusHistory).values({
+      complaintId: complaint.id,
+      newStatus: "ESCALATED",
+      oldStatus: complaint.status,
+      changedAt: new Date(),
+    });
 
     await db.insert(escalations).values({
       complaintId: complaint.id,

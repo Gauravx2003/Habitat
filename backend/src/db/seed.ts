@@ -3,7 +3,12 @@ dotenv.config({ path: ".env.local" });
 
 import { db } from "./index";
 
-import { hostels, messMenu } from "./schema";
+import {
+  complaints,
+  complaintStatusHistory,
+  hostels,
+  messMenu,
+} from "./schema";
 import { v4 as uuidv4 } from "uuid";
 
 import { eq } from "drizzle-orm";
@@ -34,57 +39,48 @@ const RULES = {
 async function seed() {
   console.log("🌱 Seeding database...");
 
-  // 2. Hostel
-  const [hostel] = await db
+  const [complaint] = await db
     .select()
-    .from(hostels)
-    .where(eq(hostels.name, "Boys Hostel A"));
+    .from(complaints)
+    .where(eq(complaints.title, "Fan Broke"));
 
-  const hostelId = hostel.id;
-  const today = new Date();
-
-  // 2. Generate Menu for Today + Next 2 Days
-  const menuEntries = [];
-
-  for (let i = 0; i < 3; i++) {
-    const currentDate = new Date(today);
-    currentDate.setDate(today.getDate() + i); // i=0 (Today), i=1 (Tomorrow)...
-
-    // Loop through each meal type
-    for (const [type, rule] of Object.entries(RULES)) {
-      // A. Set Serving Time (e.g., "2026-02-18 13:00:00")
-      const servingTime = new Date(currentDate);
-      const [hours, minutes] = rule.time.split(":").map(Number);
-      servingTime.setHours(hours, minutes, 0, 0);
-
-      // B. Calculate Cutoff Time (Serving - CutoffHours)
-      const cutoffTime = new Date(servingTime);
-      cutoffTime.setHours(cutoffTime.getHours() - rule.cutoffHours);
-
-      // C. Randomize Items slightly for variety
-      const dailyItems = [...rule.items];
-      if (Math.random() > 0.5) dailyItems.push("Special Sweet");
-
-      menuEntries.push({
-        hostelId,
-        date: new Date(currentDate), // Store the base date
-        mealType: type as "BREAKFAST" | "LUNCH" | "SNACKS" | "DINNER",
-        items: dailyItems.join(", "),
-        servingTime,
-        cutoffTime,
-      });
-    }
-  }
-
-  // 3. Insert into DB
-  if (menuEntries.length > 0) {
-    await db.insert(messMenu).values(menuEntries);
-    console.log(
-      `✅ Successfully added ${menuEntries.length} meals for the next 3 days.`,
+  const now = new Date();
+  if (!complaint.assignedStaff) {
+    throw new Error(
+      "Cannot update status: No staff is assigned to this complaint.",
     );
-  } else {
-    console.log("⚠️ No data generated.");
   }
+
+  await db.insert(complaintStatusHistory).values({
+    complaintId: complaint.id,
+    newStatus: "ASSIGNED",
+    oldStatus: "CREATED",
+    changedAt: now,
+  });
+
+  await db.insert(complaintStatusHistory).values({
+    complaintId: complaint.id,
+    newStatus: "IN_PROGRESS",
+    oldStatus: "ASSIGNED",
+    changedAt: now,
+    changedBy: complaint.assignedStaff,
+  });
+
+  await db.insert(complaintStatusHistory).values({
+    complaintId: complaint.id,
+    newStatus: "RESOLVED",
+    oldStatus: "IN_PROGRESS",
+    changedAt: new Date(),
+    changedBy: complaint.assignedStaff,
+  });
+
+  await db.insert(complaintStatusHistory).values({
+    complaintId: complaint.id,
+    newStatus: "CLOSED",
+    oldStatus: "RESOLVED",
+    changedAt: new Date(),
+    changedBy: complaint.residentId,
+  });
 
   process.exit(0);
 }

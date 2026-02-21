@@ -20,12 +20,27 @@ export interface LibraryTransaction extends LibraryBook {
   transactionStatus: "BORROWED" | "RETURNED" | "OVERDUE";
 }
 
+export interface LibraryReservation {
+  id: string;
+  bookId: string;
+  status: "RESERVED" | "FULFILLED" | "EXPIRED" | "CANCELLED";
+  reservedAt: string;
+  expiresAt: string;
+  bookDetails: LibraryBook;
+}
+
+export interface GetMyBooksResponse {
+  transactions: LibraryTransaction[];
+  reservations: LibraryReservation[];
+}
+
 export interface LibraryService {
   getAllBooks: () => Promise<LibraryBook[]>;
   getMyBooks: (
     status: "BORROWED" | "RETURNED" | "OVERDUE" | "ALL",
-  ) => Promise<LibraryTransaction[]>;
+  ) => Promise<GetMyBooksResponse>;
   borrowBook: (bookId: string) => Promise<any>;
+  reserveBook: (bookId: string) => Promise<any>;
   returnBook: (transactionId: string) => Promise<any>;
   downloadBook: (bookId: string) => Promise<{ downloadUrl: string }>;
 }
@@ -57,6 +72,16 @@ export const libraryService: LibraryService = {
       return response.data;
     } catch (error) {
       console.error("Error borrowing book:", error);
+      throw error;
+    }
+  },
+
+  reserveBook: async (bookId: string) => {
+    try {
+      const response = await api.post("/library/reserve", { bookId });
+      return response.data;
+    } catch (error) {
+      console.error("Error reserving book:", error);
       throw error;
     }
   },

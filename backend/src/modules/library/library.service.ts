@@ -6,9 +6,21 @@ import {
   libraryPlans,
   payments,
   users,
+  bookReservations,
 } from "../../db/schema";
-import { eq, and, gt, desc, sql, getTableColumns } from "drizzle-orm";
+import {
+  eq,
+  and,
+  gt,
+  desc,
+  sql,
+  getTableColumns,
+  inArray,
+  or,
+} from "drizzle-orm";
 import { createPayment } from "../finesAndPayments/finesAndPayments.service";
+
+const RESERVATION_HOURS = 24;
 
 // --- Book Listing ---
 
@@ -42,7 +54,25 @@ export const getMyBooks = async (
     conditions.push(eq(libraryTransactions.status, status));
   }
 
-  return await query.where(and(...conditions));
+  const reservations = await db
+    .select({
+      id: bookReservations.id,
+      bookId: bookReservations.bookId,
+      status: bookReservations.status,
+      reservedAt: bookReservations.reservedAt,
+      expiresAt: bookReservations.expiresAt,
+      bookDetails: getTableColumns(libraryBooks),
+    })
+    .from(bookReservations)
+    .innerJoin(libraryBooks, eq(bookReservations.bookId, libraryBooks.id))
+    .where(
+      and(
+        eq(bookReservations.userId, userId),
+        inArray(bookReservations.status, ["RESERVED", "EXPIRED"]),
+      ),
+    );
+
+  return { transactions: await query.where(and(...conditions)), reservations };
 };
 
 export const getBookById = async (bookId: string) => {
@@ -50,6 +80,26 @@ export const getBookById = async (bookId: string) => {
     .select()
     .from(libraryBooks)
     .where(eq(libraryBooks.id, bookId));
+  return book;
+};
+
+export const getMyBookById = async (bookId: string, userId: string) => {
+  const [book] = await db
+    .select()
+    .from(libraryBooks)
+    .innerJoin(
+      libraryTransactions,
+      and(
+        eq(libraryBooks.id, libraryTransactions.bookId),
+        or(
+          eq(libraryTransactions.status, "BORROWED"),
+          eq(libraryTransactions.status, "OVERDUE"),
+        ),
+      ),
+    )
+    .where(
+      and(eq(libraryBooks.id, bookId), eq(libraryTransactions.userId, userId)),
+    );
   return book;
 };
 
@@ -239,5 +289,158 @@ export const returnBook = async (transactionId: string) => {
     }
 
     return { message: "Book returned successfully", fineAmount };
+  });
+};
+
+export const reserveBook = async (userId: string, bookId: string) => {
+  return await db.transaction(async (tx) => {
+    // 1. Check Membership Requirements
+    const [membership] = await tx
+      .select()
+      .from(libraryMemberships)
+      .where(
+        and(
+          eq(libraryMemberships.userId, userId),
+          eq(libraryMemberships.status, "ACTIVE"),
+          gt(libraryMemberships.endDate, new Date()),
+        ),
+      )
+      .limit(1);
+
+    if (!membership)
+      throw new Error(
+        "Active Library Membership required to reserve physical books.",
+      );
+
+    // 2. Check Limits (Count both RESERVED and BORROWED)
+    const activeReservations = await tx
+      .select()
+      .from(bookReservations)
+      .where(
+        and(
+          eq(bookReservations.userId, userId),
+          eq(bookReservations.status, "RESERVED"),
+        ),
+      );
+
+    const activeBorrows = await tx
+      .select()
+      .from(libraryTransactions)
+      .where(
+        and(
+          eq(libraryTransactions.userId, userId),
+          eq(libraryTransactions.status, "BORROWED"),
+        ),
+      );
+
+    const [plan] = await tx
+      .select()
+      .from(libraryPlans)
+      .where(eq(libraryPlans.id, membership.planId));
+
+    const totalActive = activeReservations.length + activeBorrows.length;
+    if (plan?.maxBooksAllowed && totalActive >= plan.maxBooksAllowed) {
+      throw new Error(
+        `Limit reached. You can only have ${plan.maxBooksAllowed} books reserved/borrowed at once.`,
+      );
+    }
+
+    // 3. Check Availability & Lock
+    const [book] = await tx
+      .select()
+      .from(libraryBooks)
+      .where(eq(libraryBooks.id, bookId));
+
+    if (!book || book.availableCopies < 1) {
+      throw new Error("Book is currently out of stock.");
+    }
+
+    const [existingResrevation] = await tx
+      .select()
+      .from(bookReservations)
+      .where(
+        and(
+          eq(bookReservations.userId, userId),
+          eq(bookReservations.bookId, bookId),
+          eq(bookReservations.status, "RESERVED"),
+        ),
+      )
+      .limit(1);
+
+    if (existingResrevation) {
+      throw new Error("You have already reserved this book.");
+    }
+
+    // 4. Reserve logic: Decrement copies and create reservation ticket
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + RESERVATION_HOURS);
+
+    await tx
+      .update(libraryBooks)
+      .set({ availableCopies: sql`${libraryBooks.availableCopies} - 1` })
+      .where(eq(libraryBooks.id, bookId));
+
+    const [reservation] = await tx
+      .insert(bookReservations)
+      .values({
+        userId,
+        bookId,
+        status: "RESERVED",
+        expiresAt,
+      })
+      .returning();
+
+    return reservation;
+  });
+};
+
+export const handoverBook = async (reservationId: string) => {
+  return await db.transaction(async (tx) => {
+    // 1. Validate Ticket
+    const [reservation] = await tx
+      .select()
+      .from(bookReservations)
+      .where(eq(bookReservations.id, reservationId));
+
+    if (!reservation) throw new Error("Invalid reservation ticket.");
+    if (reservation.status !== "RESERVED")
+      throw new Error(`Ticket is already ${reservation.status}.`);
+
+    // 2. Check Expiry
+    if (new Date() > reservation.expiresAt) {
+      await tx
+        .update(bookReservations)
+        .set({ status: "EXPIRED" })
+        .where(eq(bookReservations.id, reservationId));
+      await tx
+        .update(libraryBooks)
+        .set({ availableCopies: sql`${libraryBooks.availableCopies} + 1` })
+        .where(eq(libraryBooks.id, reservation.bookId));
+      throw new Error(
+        "Reservation has expired. Book has been returned to the available pool.",
+      );
+    }
+
+    // 3. Convert Reservation to Transaction
+    await tx
+      .update(bookReservations)
+      .set({ status: "FULFILLED" })
+      .where(eq(bookReservations.id, reservationId));
+
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 14); // 14 days borrowing period
+
+    const [transaction] = await tx
+      .insert(libraryTransactions)
+      .values({
+        userId: reservation.userId,
+        bookId: reservation.bookId,
+        issueDate: new Date(),
+        dueDate: dueDate,
+        status: "BORROWED",
+      })
+      .returning();
+
+    return transaction;
   });
 };

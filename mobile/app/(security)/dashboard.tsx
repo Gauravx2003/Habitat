@@ -10,11 +10,31 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, Camera } from "expo-camera";
 import { Feather } from "@expo/vector-icons";
+import { useSelector, useDispatch } from "react-redux";
+import { useRouter } from "expo-router";
+// @ts-ignore
+import { RootState } from "../../src/store/store";
+import { logout } from "../../src/store/authSlice";
 import { api } from "../../src/services/api";
+import { DashboardHeader } from "../../components/DashboardHeader";
+import {
+  ProfileMenuModal,
+  MenuOption,
+} from "../../components/ProfileMenuModal";
 
 export default function SecurityDashboard() {
+  const router = useRouter();
+  const dispatch = useDispatch();
+  const user = useSelector((state: RootState) => state.auth.user);
+  const userName = user?.name || "Security";
+
+  console.log("user", user?.name);
+
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  // Camera / Scanner
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isScanning, setIsScanning] = useState(false); // New State to control Camera
+  const [isScanning, setIsScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scanResult, setScanResult] = useState<{
@@ -31,23 +51,75 @@ export default function SecurityDashboard() {
     getCameraPermissions();
   }, []);
 
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: () => {
+          dispatch(logout());
+          router.replace("/");
+        },
+      },
+    ]);
+  };
+
+  const menuOptions: MenuOption[] = [
+    {
+      label: "My Profile",
+      icon: "user",
+      color: "#2563EB",
+      bg: "#EFF6FF",
+      onPress: () => {
+        setMenuVisible(false);
+        router.push("/(security)/profile" as any);
+      },
+    },
+    {
+      label: "Notifications",
+      icon: "bell",
+      color: "#EA580C",
+      bg: "#FFF7ED",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Notification settings will be available soon.",
+        );
+      },
+    },
+    {
+      label: "Appearance",
+      icon: "sun",
+      color: "#0891B2",
+      bg: "#ECFEFF",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Appearance settings will be available soon.",
+        );
+      },
+    },
+  ];
+
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || loading) return;
     setScanned(true);
     setLoading(true);
 
     try {
-      // Call Backend Scan API
       const response = await api.post("/gate-pass/scan", { qrToken: data });
       const result = response.data;
       setScanResult(result);
-      setIsScanning(false); // Close camera on success
+      setIsScanning(false);
     } catch (error: any) {
       console.error("Scan Failed:", error);
       Alert.alert(
         "Scan Failed",
         error.response?.data?.message || "Invalid QR Code",
-        [{ text: "OK", onPress: () => setScanned(false) }], // Allow retry
+        [{ text: "OK", onPress: () => setScanned(false) }],
       );
     } finally {
       setLoading(false);
@@ -71,11 +143,12 @@ export default function SecurityDashboard() {
     setIsScanning(true);
   };
 
+  // ─── PERMISSION SCREENS ───────────────────────────────────
   if (hasPermission === null) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={{ marginTop: 10, color: "white" }}>
+        <Text style={{ marginTop: 10, color: "#94A3B8" }}>
           Requesting camera permission...
         </Text>
       </View>
@@ -83,8 +156,8 @@ export default function SecurityDashboard() {
   }
   if (hasPermission === false) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: "white" }}>No access to camera</Text>
+      <View style={[styles.container, styles.center]}>
+        <Text style={{ color: "#94A3B8" }}>No access to camera</Text>
         <TouchableOpacity
           onPress={() => Camera.requestCameraPermissionsAsync()}
           style={{ marginTop: 20 }}
@@ -95,7 +168,7 @@ export default function SecurityDashboard() {
     );
   }
 
-  // 1. RESULT SCREEN
+  // ─── 1. RESULT SCREEN ─────────────────────────────────────
   if (scanResult) {
     return (
       <SafeAreaView style={[styles.container, styles.bgSuccess]}>
@@ -132,7 +205,7 @@ export default function SecurityDashboard() {
     );
   }
 
-  // 2. SCANNER SCREEN
+  // ─── 2. SCANNER SCREEN ────────────────────────────────────
   if (isScanning) {
     return (
       <SafeAreaView style={styles.container}>
@@ -170,23 +243,51 @@ export default function SecurityDashboard() {
     );
   }
 
-  // 3. DASHBOARD (LANDING)
+  // ─── 3. DASHBOARD (LANDING) ───────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
+      {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Security Guard</Text>
-        <Text style={styles.headerSub}>Campus Gate Control</Text>
+        <DashboardHeader
+          userName={userName}
+          onAvatarPress={() => setMenuVisible(true)}
+        />
       </View>
 
+      {/* SHIFT BADGE */}
+      <View style={styles.shiftCard}>
+        <View style={styles.shiftLeft}>
+          <View style={styles.shiftDot} />
+          <Text style={styles.shiftText}>On Duty • Gate Control</Text>
+        </View>
+        <View style={styles.shiftBadge}>
+          <Feather name="shield" size={14} color="#2563EB" />
+          <Text style={styles.shiftBadgeText}>SECURITY</Text>
+        </View>
+      </View>
+
+      {/* SCAN BUTTON */}
       <View style={styles.actionContainer}>
         <TouchableOpacity style={styles.scanBtn} onPress={startScan}>
           <View style={styles.iconCircle}>
-            <Feather name="maximize" size={32} color="#0F172A" />
+            <Feather name="maximize" size={26} color="#0F172A" />
           </View>
-          <Text style={styles.scanBtnText}>Scan QR Code</Text>
-          <Text style={styles.scanBtnSub}>Tap to scan student gate pass</Text>
+          <View>
+            <Text style={styles.scanBtnText}>Scan QR Code</Text>
+            <Text style={styles.scanBtnSub}>Tap to scan student gate pass</Text>
+          </View>
         </TouchableOpacity>
       </View>
+
+      {/* PROFILE MENU */}
+      <ProfileMenuModal
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        userName={userName}
+        userEmail={user?.email}
+        menuOptions={menuOptions}
+        onLogout={handleLogout}
+      />
     </SafeAreaView>
   );
 }
@@ -198,62 +299,130 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // Dashboard Landing
+  // Header
   header: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 8,
-  },
-  headerSub: {
-    fontSize: 16,
-    color: "#94A3B8",
-  },
-  actionContainer: {
-    flex: 1,
-    justifyContent: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  greetingText: {
+    fontSize: 14,
+    color: "#94A3B8",
+    fontWeight: "500",
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "white",
+    marginTop: 2,
+  },
+  avatarBtn: {
+    height: 44,
+    width: 44,
+    borderRadius: 22,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+  },
+  avatarText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+
+  // Shift Card
+  shiftCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  shiftLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  shiftDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4ADE80",
+    marginRight: 10,
+  },
+  shiftText: {
+    color: "#CBD5E1",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  shiftBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(37,99,235,0.15)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 5,
+  },
+  shiftBadgeText: {
+    color: "#60A5FA",
+    fontWeight: "800",
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+
+  // Scan Button
+  actionContainer: {
+    paddingHorizontal: 20,
+    marginTop: 24,
   },
   scanBtn: {
     backgroundColor: "#2563EB",
-    width: "100%",
-    maxWidth: 300,
-    aspectRatio: 1,
-    borderRadius: 32,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    borderRadius: 20,
     shadowColor: "#2563EB",
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
     borderWidth: 1,
     borderColor: "#3B82F6",
+    gap: 16,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
   },
   scanBtnText: {
     color: "white",
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 8,
   },
   scanBtnSub: {
     color: "#BFDBFE",
-    fontSize: 14,
-    textAlign: "center",
+    fontSize: 13,
+    marginTop: 2,
   },
 
   // Scanner View
@@ -368,5 +537,86 @@ const styles = StyleSheet.create({
     color: "#15803D",
     fontSize: 18,
     fontWeight: "bold",
+  },
+
+  // ─── Profile Menu Modal ───
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 12,
+  },
+  modalAvatar: {
+    height: 52,
+    width: 52,
+    borderRadius: 26,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalAvatarText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 20,
+  },
+  modalUserName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#111827",
+  },
+  modalUserEmail: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 8,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 14,
+  },
+  menuIconCircle: {
+    height: 40,
+    width: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#1F2937",
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 14,
+  },
+  logoutText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#DC2626",
   },
 });

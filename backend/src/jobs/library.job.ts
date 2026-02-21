@@ -1,55 +1,123 @@
 import cron from "node-cron";
 import { db } from "../db";
-import { libraryTransactions, users, notifications } from "../db/schema";
-import { eq, and, lt } from "drizzle-orm";
+import {
+  libraryTransactions,
+  users,
+  libraryPlans,
+  libraryMemberships,
+  bookReservations, // <-- NEW
+  libraryBooks, // <-- NEW
+} from "../db/schema";
+import { eq, and, lt, inArray, sql } from "drizzle-orm"; // Make sure to import sql
 
-// Run every day at Midnight (00:00)
 export const startLibraryCron = () => {
-  cron.schedule("* * * * *", async () => {
+  // ============================================================================
+  // JOB 1: DAILY OVERDUE CHECK (Runs every day at Midnight - 00:00)
+  // ============================================================================
+  cron.schedule("0 0 * * *", async () => {
     console.log("🔄 Running Library Overdue Check...");
 
     try {
       const now = new Date();
 
-      // 1. Find all transactions that are 'BORROWED' but past their Due Date
       const overdueTransactions = await db
         .select()
         .from(libraryTransactions)
         .where(
           and(
-            eq(libraryTransactions.status, "BORROWED"),
-            lt(libraryTransactions.dueDate, now), // Due Date is less than (before) Now
+            inArray(libraryTransactions.status, ["BORROWED", "OVERDUE"]),
+            lt(libraryTransactions.dueDate, now),
           ),
         );
 
       if (overdueTransactions.length === 0) {
-        console.log("✅ No new overdue books found.");
+        console.log("✅ No overdue books found.");
         return;
       }
 
-      console.log(`⚠️ Found ${overdueTransactions.length} overdue books.`);
+      console.log(`⚠️ Processing ${overdueTransactions.length} overdue books.`);
 
-      // 2. Process each overdue transaction
       for (const tx of overdueTransactions) {
-        // A. Update Status to OVERDUE
+        const [membership] = await db
+          .select({
+            finePerDay: libraryPlans.finePerDay,
+          })
+          .from(libraryMemberships)
+          .innerJoin(
+            libraryPlans,
+            eq(libraryMemberships.planId, libraryPlans.id),
+          )
+          .where(eq(libraryMemberships.userId, tx.userId));
+
+        const dailyFine = membership?.finePerDay || 0;
+
         await db
           .update(libraryTransactions)
-          .set({ status: "OVERDUE" })
+          .set({
+            status: "OVERDUE",
+            fineAmount: (tx.fineAmount || 0) + dailyFine,
+          })
           .where(eq(libraryTransactions.id, tx.id));
 
-        // B. Send Notification to Student
-        // await db.insert(notifications).values({
-        //   userId: tx.userId,
-        //   title: "Book Overdue Alert",
-        //   message:
-        //     "You have a book that is past its due date. Fines are now accumulating.",
-        //   type: "WARNING",
-        // });
-
-        // C. Optional: Send Email/SMS here
+        if (tx.status === "BORROWED") {
+          // Optional: Trigger push notification to user here
+        }
       }
     } catch (error) {
-      console.error("❌ Library Cron Failed:", error);
+      console.error("❌ Library Overdue Cron Failed:", error);
+    }
+  });
+
+  // ============================================================================
+  // JOB 2: HOURLY RESERVATION EXPIRY (Runs at minute 0 past every hour)
+  // ============================================================================
+  cron.schedule("0 * * * *", async () => {
+    console.log("🔄 Running Library Reservation Expiry Check...");
+
+    try {
+      const now = new Date();
+
+      // 1. Find reservations that are still pending but past their expiry time
+      const expiredReservations = await db
+        .select()
+        .from(bookReservations)
+        .where(
+          and(
+            eq(bookReservations.status, "RESERVED"),
+            lt(bookReservations.expiresAt, now),
+          ),
+        );
+
+      if (expiredReservations.length === 0) {
+        return; // Silent return to keep logs clean
+      }
+
+      console.log(
+        `⚠️ Reclaiming ${expiredReservations.length} expired reservations.`,
+      );
+
+      // 2. Process each expired ticket safely in a transaction
+      for (const res of expiredReservations) {
+        await db.transaction(async (tx) => {
+          // A. Void the ticket
+          await tx
+            .update(bookReservations)
+            .set({ status: "EXPIRED" })
+            .where(eq(bookReservations.id, res.id));
+
+          // B. Put the book back on the shelf (increment copies)
+          await tx
+            .update(libraryBooks)
+            .set({ availableCopies: sql`${libraryBooks.availableCopies} + 1` })
+            .where(eq(libraryBooks.id, res.bookId));
+        });
+      }
+
+      console.log(
+        `✅ Successfully returned ${expiredReservations.length} books to the available pool.`,
+      );
+    } catch (error) {
+      console.error("❌ Reservation Expiry Cron Failed:", error);
     }
   });
 };

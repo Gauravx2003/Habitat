@@ -4,6 +4,9 @@ import {
   getAssignedComplaintsController,
   updateComplaintStatusController,
   getStaffBySpecializationController,
+  getStaffProfileController,
+  updateStaffStatusController,
+  getSecurityProfileController,
 } from "./staff.controller";
 
 const router = Router();
@@ -27,6 +30,27 @@ router.get(
   authenticate,
   authorize(["ADMIN"]),
   getStaffBySpecializationController,
+);
+
+router.get(
+  "/me",
+  authenticate,
+  authorize(["STAFF"]),
+  getStaffProfileController,
+);
+
+router.get(
+  "/security/me",
+  authenticate,
+  authorize(["SECURITY"]),
+  getSecurityProfileController,
+);
+
+router.patch(
+  "/status",
+  authenticate,
+  authorize(["STAFF"]),
+  updateStaffStatusController,
 );
 
 export default router;

@@ -10,6 +10,7 @@ export interface LostItem {
   status: "OPEN" | "FOUND" | "CLAIMED" | "CLOSED";
   createdAt: string;
   images?: string[]; // Array of image URLs
+  attachments?: { id: string; fileURL: string }[];
 }
 
 export interface FoundItem {
@@ -22,6 +23,7 @@ export interface FoundItem {
   status: "OPEN" | "CLAIMED" | "CLOSED";
   createdAt: string;
   images?: string[];
+  attachments?: { id: string; fileURL: string }[];
 }
 
 export interface CreateLostItemPayload {

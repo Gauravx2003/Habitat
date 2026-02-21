@@ -83,6 +83,13 @@ export const bookInventoryStatusEnum = pgEnum("book_inventory_status", [
   "LOST_FOREVER", // Gone from library entirely
 ]);
 
+export const reservationStatusEnum = pgEnum("reservation_status", [
+  "RESERVED", // User booked it
+  "FULFILLED", // User picked it up (Ticket used)
+  "EXPIRED", // Time ran out (Ticket void)
+  "CANCELLED", // User cancelled it
+]);
+
 // 2. For the TRANSACTION (Circulation)
 // This tracks the lifecycle of a student borrowing a book.
 export const transactionStatusEnum = pgEnum("transaction_status", [
@@ -175,6 +182,10 @@ export const libraryBooks = pgTable("library_books", {
   totalCopies: integer("total_copies").default(1).notNull(),
   availableCopies: integer("available_copies").default(1).notNull(),
 
+  category: text("category").notNull(), // e.g., "Engineering"
+  subCategory: text("sub_category").notNull(), // e.g., "Computer Science"
+  tags: text("tags").array(),
+
   // Digital Book Fields
   isDigital: boolean("is_digital").default(false),
   downloadUrl: text("download_url"), // Secure URL for PDF/EPUB
@@ -203,6 +214,21 @@ export const libraryTransactions = pgTable("library_transactions", {
   fineAmount: integer("fine_amount").default(0),
   isFinePaid: boolean("is_fine_paid").default(false),
   finePaymentId: uuid("fine_payment_id").references(() => payments.id), // Link to payment when paid
+});
+
+export const bookReservations = pgTable("book_reservations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id)
+    .notNull(),
+  bookId: uuid("book_id")
+    .references(() => libraryBooks.id)
+    .notNull(),
+
+  status: reservationStatusEnum("status").default("RESERVED").notNull(),
+
+  reservedAt: timestamp("reserved_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
 });
 
 // NEW: Defines the rules/packages for a specific Hostel's library
@@ -362,11 +388,11 @@ export const residentProfiles = pgTable("resident_profiles", {
     .references(() => users.id)
     .primaryKey(),
   roomId: uuid("room_id").references(() => rooms.id),
-  enrollmentNumber: varchar("enrollment_number", { length: 50 }),
-  phone: varchar("phone", { length: 15 }),
-  dateOfBirth: date("date_of_birth"),
+  enrollmentNumber: varchar("enrollment_number", { length: 50 }).unique(),
+  phone: varchar("phone", { length: 15 }).unique().notNull(),
+  dateOfBirth: date("date_of_birth").notNull(),
   department: varchar("department", { length: 50 }),
-  departmentId: varchar("department_id", { length: 20 }),
+  departmentId: varchar("department_id", { length: 20 }).unique(),
 });
 
 export const staffProfiles = pgTable("staff_profiles", {
@@ -375,7 +401,20 @@ export const staffProfiles = pgTable("staff_profiles", {
     .primaryKey(),
   staffType: staffTypeEnum("staff_type").notNull(),
   specialization: varchar("specialization", { length: 50 }),
+  phone: varchar("phone", { length: 15 }).unique().notNull(),
+  dateOfBirth: date("date_of_birth").notNull(),
+  currentTasks: integer("current_tasks").default(0),
   maxActiveTasks: integer("max_active_tasks").default(5),
+});
+
+export const securityProfiles = pgTable("security_profiles", {
+  userId: uuid("user_id")
+    .references(() => users.id)
+    .primaryKey(),
+  phone: varchar("phone", { length: 15 }).unique().notNull(),
+  dateOfBirth: date("date_of_birth").notNull(),
+  assignedGate: varchar("assigned_gate", { length: 50 }).notNull(),
+  shift: varchar("shift", { length: 50 }).notNull(),
 });
 
 export const complaintCategories = pgTable("complaint_categories", {
@@ -426,9 +465,7 @@ export const complaintStatusHistory = pgTable("complaint_status_history", {
     .notNull(),
   oldStatus: complaintStatusEnum("old_status"),
   newStatus: complaintStatusEnum("new_status"),
-  changedBy: uuid("changed_by")
-    .references(() => users.id)
-    .notNull(),
+  changedBy: uuid("changed_by").references(() => users.id),
   changedAt: timestamp("changed_at").defaultNow(),
 });
 

@@ -6,7 +6,13 @@ import {
   getEscalatedComplaints,
   getAllComplaintCategories,
   reassignComplaint,
+  adminCloseComplaint,
+  residentRejectResolution,
+  residentCloseComplaint,
 } from "./complaints.service";
+import { complaintStatusHistory, users } from "../../db/schema";
+import { eq, getTableColumns } from "drizzle-orm";
+import { db } from "../../db";
 
 export const raiseComplaint = async (req: Authenticate, res: Response) => {
   try {
@@ -85,6 +91,85 @@ export const reassignComplaintController = async (
     const complaint = await reassignComplaint(id, newStaffId, req.user!.userId);
 
     return res.status(200).json(complaint);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const residentCloseComplaintController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+    const complaint = await residentCloseComplaint(id, req.user!.userId);
+    return res
+      .status(200)
+      .json({ message: "Complaint closed successfully", complaint });
+  } catch (error: any) {
+    return res
+      .status(400)
+      .json({ message: error.message || "Failed to close complaint" });
+  }
+};
+
+export const residentRejectResolutionController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const complaint = await residentRejectResolution(
+      id,
+      req.user!.userId,
+      reason,
+    );
+    return res
+      .status(200)
+      .json({ message: "Complaint escalated to Admin", complaint });
+  } catch (error: any) {
+    return res
+      .status(400)
+      .json({ message: error.message || "Failed to reject resolution" });
+  }
+};
+
+export const adminCloseComplaintController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+    const complaint = await adminCloseComplaint(id);
+    return res
+      .status(200)
+      .json({ message: "Complaint forcefully closed by Admin", complaint });
+  } catch (error: any) {
+    return res
+      .status(400)
+      .json({ message: error.message || "Failed to close complaint" });
+  }
+};
+
+export const getComplaintHistoryController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+
+    const complaintHistory = await db
+      .select({
+        ...getTableColumns(complaintStatusHistory),
+        changedByName: users.name,
+      })
+      .from(complaintStatusHistory)
+      .leftJoin(users, eq(complaintStatusHistory.changedBy, users.id))
+      .where(eq(complaintStatusHistory.complaintId, id));
+
+    return res.status(200).json(complaintHistory);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });

@@ -7,6 +7,7 @@ export interface MessIssue {
   category: "FOOD" | "SERVICE" | "HYGIENE" | "INFRASTRUCTURE" | "OTHER";
   status: "OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED";
   adminResponse?: string;
+  attachments?: { id: string; fileURL: string }[];
   createdAt: string;
 }
 
@@ -48,6 +49,24 @@ export const messService = {
 
   optOutForMeal: async (menuId: string) => {
     const response = await api.post("/smart-mess/opt-out", { menuId });
+    return response.data;
+  },
+
+  uploadIssueAttachments: async (issueId: string, imageUris: string[]) => {
+    const formData = new FormData();
+    imageUris.forEach((uri, index) => {
+      formData.append("images", {
+        uri,
+        name: `issue_image_${index}.jpg`,
+        type: "image/jpeg",
+      } as any);
+    });
+
+    const response = await api.post(
+      `/mess-issues/${issueId}/attachments`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
     return response.data;
   },
 };

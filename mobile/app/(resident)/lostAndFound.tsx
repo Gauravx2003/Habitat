@@ -11,7 +11,13 @@ import {
   Image,
   RefreshControl,
   SafeAreaView,
+  ScrollView,
+  Modal,
+  Pressable,
+  Dimensions,
 } from "react-native";
+
+const { width } = Dimensions.get("window");
 import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "expo-router";
@@ -32,6 +38,9 @@ export default function LostAndFoundScreen() {
   );
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Fullscreen Image Viewer
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   // --- TAB 1: REPORT LOST ---
   const [title, setTitle] = useState("");
@@ -180,6 +189,28 @@ export default function LostAndFoundScreen() {
         {item.description}
       </Text>
 
+      {/* Attachment Thumbnails */}
+      {item.attachments && item.attachments.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.attachmentRow}
+        >
+          {item.attachments.map((att) => (
+            <TouchableOpacity
+              key={att.id}
+              onPress={() => setViewerImage(att.fileURL)}
+              activeOpacity={0.85}
+            >
+              <Image
+                source={{ uri: att.fileURL }}
+                style={styles.attachmentThumb}
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={styles.cardFooter}>
         <Text style={styles.cardDate}>
           <Feather name="calendar" size={12} />{" "}
@@ -257,6 +288,28 @@ export default function LostAndFoundScreen() {
       <Text style={styles.cardDesc} numberOfLines={1}>
         {item.description}
       </Text>
+
+      {/* Attachment Thumbnails */}
+      {item.attachments && item.attachments.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.attachmentRow}
+        >
+          {item.attachments.map((att) => (
+            <TouchableOpacity
+              key={att.id}
+              onPress={() => setViewerImage(att.fileURL)}
+              activeOpacity={0.85}
+            >
+              <Image
+                source={{ uri: att.fileURL }}
+                style={styles.attachmentThumb}
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 
@@ -435,6 +488,32 @@ export default function LostAndFoundScreen() {
           />
         )}
       </View>
+      {/* Fullscreen Image Viewer */}
+      <Modal
+        visible={!!viewerImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerImage(null)}
+      >
+        <Pressable
+          style={styles.imageViewerBackdrop}
+          onPress={() => setViewerImage(null)}
+        >
+          <TouchableOpacity
+            style={styles.imageViewerClose}
+            onPress={() => setViewerImage(null)}
+          >
+            <Feather name="x" size={24} color="white" />
+          </TouchableOpacity>
+          {viewerImage && (
+            <Image
+              source={{ uri: viewerImage }}
+              style={styles.imageViewerFull}
+              resizeMode="contain"
+            />
+          )}
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -574,4 +653,38 @@ const styles = StyleSheet.create({
   textGreen: { color: "#16A34A" },
   bgGray: { backgroundColor: "#F3F4F6" },
   textGray: { color: "#6B7280" },
+
+  // Attachment Thumbnails
+  attachmentRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    paddingBottom: 4,
+  },
+  attachmentThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+  },
+
+  // Fullscreen Image Viewer
+  imageViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  imageViewerFull: {
+    width: width - 32,
+    height: width - 32,
+    borderRadius: 12,
+  },
 });

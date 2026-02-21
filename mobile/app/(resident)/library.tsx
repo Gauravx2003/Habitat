@@ -13,6 +13,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { DigitalLibraryModal } from "../../components/library/DigitalLibraryModal";
+import { ExploreLibraryModal } from "../../components/library/ExploreLibraryModal";
+import { ReservationQRModal } from "../../components/library/ReservationQRModal";
 import {
   membershipService,
   Membership,
@@ -22,6 +26,7 @@ import {
   libraryService,
   LibraryTransaction,
   LibraryBook,
+  LibraryReservation,
 } from "../../src/services/library.service";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -97,8 +102,38 @@ export default function LibraryScreen() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [membership, setMembership] = useState<any>(null); // Extended Membership type
   const [myBooks, setMyBooks] = useState<LibraryTransaction[]>([]);
+  const [myReservations, setMyReservations] = useState<LibraryReservation[]>(
+    [],
+  );
   const [digitalBooks, setDigitalBooks] = useState<LibraryBook[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [selectedReservationId, setSelectedReservationId] = useState("");
+  const [showExploreModal, setShowExploreModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [allPhysicalBooks, setAllPhysicalBooks] = useState<LibraryBook[]>([]);
+  const settingsAnim = useRef(new Animated.Value(0)).current;
+
+  const openSettings = () => {
+    setShowSettingsModal(true);
+    Animated.spring(settingsAnim, {
+      toValue: 1,
+      friction: 6,
+      tension: 120,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeSettings = (callback?: () => void) => {
+    Animated.timing(settingsAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowSettingsModal(false);
+      callback?.();
+    });
+  };
 
   const fetchData = async () => {
     try {
@@ -111,8 +146,10 @@ export default function LibraryScreen() {
           libraryService.getAllBooks(),
         ]);
       setPlans(fetchedPlans);
-      setMyBooks(fetchedBooks);
+      setMyBooks(fetchedBooks.transactions || []);
+      setMyReservations(fetchedBooks.reservations || []);
       setDigitalBooks(allLibraryBooks.filter((b) => b.isDigital));
+      setAllPhysicalBooks(allLibraryBooks.filter((b) => !b.isDigital));
 
       const activeLibMem = myMemberships.library.find(
         (m) => m.status === "ACTIVE",
@@ -129,13 +166,16 @@ export default function LibraryScreen() {
           plan: { ...planDetails, ...displayInfo },
           endDate: new Date(activeLibMem.endDate).toDateString(),
           // Dummies for now
-          totalBorrowed: 24,
-          currentBorrowed: fetchedBooks.filter(
+          totalBorrowed: fetchedBooks.transactions?.length || 0,
+          currentBorrowed: (fetchedBooks.transactions || []).filter(
             (b) =>
               b.transactionStatus === "BORROWED" ||
               b.transactionStatus === "OVERDUE",
           ).length,
-          fineBalance: fetchedBooks.reduce((acc, b) => acc + b.fineAmount, 0),
+          fineBalance: (fetchedBooks.transactions || []).reduce(
+            (acc, b) => acc + b.fineAmount,
+            0,
+          ),
         });
       } else {
         setMembership(null);
@@ -178,6 +218,24 @@ export default function LibraryScreen() {
       }
     } catch (error: any) {
       alert(error.message || "Failed to download book");
+    }
+  };
+
+  const handleReserve = async (book: LibraryBook) => {
+    try {
+      setIsLoading(true);
+      await libraryService.reserveBook(book.id);
+      alert("Book reserved successfully! Please collect it within 24 hours.");
+      fetchData(); // Refresh data
+      setShowExploreModal(false);
+    } catch (error: any) {
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to reserve book",
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -470,23 +528,12 @@ export default function LibraryScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Library</Text>
         <View style={styles.headerActions}>
-          {membership &&
-            membership.hasMembership &&
-            membership.plan.tier !== "BRONZE" && (
-              <TouchableOpacity
-                style={styles.digitalLibraryBtn}
-                onPress={() => setShowDigitalLibrary(true)}
-              >
-                <Feather name="download-cloud" size={20} color="#7C3AED" />
-                <Text style={styles.digitalLibraryBtnText}>Digital</Text>
-              </TouchableOpacity>
-            )}
           {membership && membership.hasMembership && (
             <TouchableOpacity
               style={styles.manageMembershipBtn}
-              onPress={() => setShowPlanModal(true)}
+              onPress={openSettings}
             >
-              <Feather name="settings" size={20} color="#2563EB" />
+              <Feather name="settings" size={22} color="#0F172A" />
             </TouchableOpacity>
           )}
         </View>
@@ -496,31 +543,30 @@ export default function LibraryScreen() {
         {/* Membership Card */}
         {renderMembershipCard()}
 
-        {/* Membership Actions */}
+        {/* Quick Actions */}
         {membership && membership.hasMembership && (
-          <View style={styles.actionButtons}>
+          <View style={styles.quickActionsContainer}>
             <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setShowPlanModal(true)}
+              style={[styles.quickActionBtn, { backgroundColor: "#DBEAFE" }]}
+              onPress={() => setShowExploreModal(true)}
             >
-              <Feather name="refresh-cw" size={18} color="#2563EB" />
-              <Text style={styles.actionBtnText}>Renew</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setShowPlanModal(true)}
-            >
-              <Feather name="arrow-up" size={18} color="#7C3AED" />
-              <Text style={[styles.actionBtnText, { color: "#7C3AED" }]}>
-                Upgrade
+              <Feather name="book-open" size={24} color="#2563EB" />
+              <Text style={[styles.quickActionText, { color: "#2563EB" }]}>
+                Explore
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
-              <Feather name="x-circle" size={18} color="#EF4444" />
-              <Text style={[styles.actionBtnText, { color: "#EF4444" }]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
+
+            {membership.plan.tier !== "BRONZE" && (
+              <TouchableOpacity
+                style={[styles.quickActionBtn, { backgroundColor: "#F3E8FF" }]}
+                onPress={() => setShowDigitalLibrary(true)}
+              >
+                <Feather name="download-cloud" size={24} color="#7C3AED" />
+                <Text style={[styles.quickActionText, { color: "#7C3AED" }]}>
+                  Digital
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -539,7 +585,12 @@ export default function LibraryScreen() {
         {/* Tabs */}
         {membership && membership.hasMembership && (
           <>
-            <View style={styles.tabs}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tabsScrollContainer}
+              contentContainerStyle={styles.tabs}
+            >
               <TouchableOpacity
                 onPress={() => setActiveTab("borrowed")}
                 style={styles.tabItem}
@@ -584,7 +635,24 @@ export default function LibraryScreen() {
                 </Text>
                 {activeTab === "history" && <View style={styles.activeLine} />}
               </TouchableOpacity>
-            </View>
+
+              <TouchableOpacity
+                onPress={() => setActiveTab("reservations")}
+                style={styles.tabItem}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "reservations" && styles.tabTextActive,
+                  ]}
+                >
+                  Reserved ({myReservations.length})
+                </Text>
+                {activeTab === "reservations" && (
+                  <View style={styles.activeLine} />
+                )}
+              </TouchableOpacity>
+            </ScrollView>
 
             {/* Book Lists */}
             <View style={styles.listContainer}>
@@ -673,6 +741,60 @@ export default function LibraryScreen() {
                     </View>
                   </View>
                 ))}
+
+              {activeTab === "reservations" &&
+                myReservations.map((res: any) => {
+                  const hoursLeft = Math.max(
+                    0,
+                    Math.floor(
+                      (new Date(res.expiresAt).getTime() -
+                        new Date().getTime()) /
+                        (1000 * 60 * 60),
+                    ),
+                  );
+                  return (
+                    <View key={res.id} style={styles.bookItem}>
+                      <View
+                        style={[
+                          styles.bookCover,
+                          { backgroundColor: "#F3E8FF" },
+                        ]}
+                      >
+                        <Feather name="clock" size={24} color="#7C3AED" />
+                      </View>
+                      <View style={styles.bookInfo}>
+                        <Text style={styles.bookTitle}>
+                          {res.bookDetails?.title || "Unknown Book"}
+                        </Text>
+                        <Text style={styles.bookAuthor}>
+                          Ticket: {res.id.slice(0, 8).toUpperCase()}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.bookDue,
+                            { color: hoursLeft <= 2 ? "#DC2626" : "#7C3AED" },
+                          ]}
+                        >
+                          Expires in {hoursLeft} hrs
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.renewBtn,
+                          { backgroundColor: "#7C3AED" },
+                        ]}
+                        onPress={() => {
+                          setSelectedReservationId(res.id);
+                          setShowQrModal(true);
+                        }}
+                      >
+                        <Text style={[styles.renewText, { color: "white" }]}>
+                          Show QR
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
             </View>
           </>
         )}
@@ -680,73 +802,90 @@ export default function LibraryScreen() {
 
       {renderPlanModal()}
 
-      {/* Digital Library Modal */}
-      <Modal
+      <DigitalLibraryModal
         visible={showDigitalLibrary}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowDigitalLibrary(false)}
-      >
-        <SafeAreaView style={styles.digitalLibraryContainer}>
-          <View style={styles.digitalLibraryHeader}>
-            <TouchableOpacity onPress={() => setShowDigitalLibrary(false)}>
-              <Feather name="arrow-left" size={24} color="#0F172A" />
-            </TouchableOpacity>
-            <Text style={styles.digitalLibraryTitle}>Digital Library</Text>
-            <View style={{ width: 24 }} />
-          </View>
+        onClose={() => setShowDigitalLibrary(false)}
+        books={digitalBooks}
+        onDownload={handleDownload}
+      />
 
-          <View style={styles.digitalLibrarySearch}>
-            <Feather name="search" size={20} color="#9CA3AF" />
-            <TextInput
-              placeholder="Search digital books..."
-              style={styles.searchInput}
-              placeholderTextColor="#9CA3AF"
+      <ExploreLibraryModal
+        visible={showExploreModal}
+        onClose={() => setShowExploreModal(false)}
+        books={allPhysicalBooks}
+        onReserve={handleReserve}
+      />
+
+      <ReservationQRModal
+        visible={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        reservationId={selectedReservationId}
+      />
+
+      {/* Settings Dropdown */}
+      {showSettingsModal && (
+        <>
+          <BlurView intensity={60} tint="light" style={styles.settingsBackdrop}>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={1}
+              onPress={() => closeSettings()}
             />
-          </View>
+          </BlurView>
+          <Animated.View
+            style={[
+              styles.settingsDropdown,
+              {
+                opacity: settingsAnim,
+                transform: [
+                  {
+                    scale: settingsAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.3, 1],
+                    }),
+                  },
+                  {
+                    translateY: settingsAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.settingsOption}
+              onPress={() => closeSettings(() => setShowPlanModal(true))}
+            >
+              <Feather name="arrow-up" size={20} color="#7C3AED" />
+              <Text style={styles.settingsOptionText}>Upgrade Plan</Text>
+            </TouchableOpacity>
 
-          <ScrollView style={styles.digitalLibraryContent}>
-            <Text style={styles.sectionTitle}>Available E-Books</Text>
-            {digitalBooks.map((book) => (
-              <View key={book.id} style={styles.digitalBookCard}>
-                <View style={styles.digitalBookIcon}>
-                  <Feather
-                    name={
-                      book.format === "AUDIOBOOK" ? "headphones" : "file-text"
-                    }
-                    size={32}
-                    color="#7C3AED"
-                  />
-                </View>
-                <View style={styles.digitalBookInfo}>
-                  <Text style={styles.digitalBookTitle}>{book.title}</Text>
-                  <Text style={styles.digitalBookAuthor}>{book.author}</Text>
-                  <View style={styles.digitalBookMeta}>
-                    <View style={styles.formatBadge}>
-                      <Text style={styles.formatText}>{book.format}</Text>
-                    </View>
-                    {/* Size not in backend yet, hiding or dummy */}
-                    {/* <Text style={styles.digitalBookSize}>{book.size}</Text> */}
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.digitalDownloadBtn}
-                  onPress={() => handleDownload(book)}
-                >
-                  <Feather name="download" size={20} color="white" />
-                </TouchableOpacity>
-              </View>
-            ))}
-            {digitalBooks.length === 0 && (
-              <Text
-                style={{ textAlign: "center", marginTop: 20, color: "#64748B" }}
-              >
-                No digital books available.
+            <View style={styles.settingsDivider} />
+
+            <TouchableOpacity
+              style={styles.settingsOption}
+              onPress={() => closeSettings(() => setShowPlanModal(true))}
+            >
+              <Feather name="refresh-cw" size={20} color="#2563EB" />
+              <Text style={styles.settingsOptionText}>Renew Plan</Text>
+            </TouchableOpacity>
+
+            <View style={styles.settingsDivider} />
+
+            <TouchableOpacity
+              style={styles.settingsOption}
+              onPress={() => closeSettings(() => setShowPlanModal(true))}
+            >
+              <Feather name="x-circle" size={20} color="#EF4444" />
+              <Text style={[styles.settingsOptionText, { color: "#EF4444" }]}>
+                Cancel Plan
               </Text>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+            </TouchableOpacity>
+          </Animated.View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -770,9 +909,48 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   manageMembershipBtn: {
-    backgroundColor: "#DBEAFE",
-    padding: 10,
+    padding: 8,
     borderRadius: 12,
+  },
+  settingsBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.15)",
+    zIndex: 999,
+  },
+  settingsDropdown: {
+    position: "absolute",
+    top: 75,
+    right: 20,
+    backgroundColor: "white",
+    borderRadius: 16,
+    width: 200,
+    paddingVertical: 8,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    zIndex: 1000,
+    transformOrigin: "top right",
+  },
+  settingsOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  settingsOptionText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
   },
 
   // No Membership Card
@@ -914,28 +1092,23 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  // Action Buttons
-  actionButtons: {
+  // Quick Actions
+  quickActionsContainer: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 20,
   },
-  actionBtn: {
+  quickActionBtn: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "white",
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
   },
-  actionBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#2563EB",
+  quickActionText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 
   // Search
@@ -952,11 +1125,14 @@ const styles = StyleSheet.create({
   searchInput: { marginLeft: 10, flex: 1, fontSize: 16, color: "#0F172A" },
 
   // Tabs
+  tabsScrollContainer: {
+    marginBottom: 20,
+  },
   tabs: {
     flexDirection: "row",
-    marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
+    paddingBottom: 4,
   },
   tabItem: { marginRight: 24, paddingBottom: 10 },
   tabText: { fontSize: 16, color: "#64748B", fontWeight: "600" },

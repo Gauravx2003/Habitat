@@ -2,12 +2,21 @@ import { Authenticate } from "../../middleware/auth";
 import { getAssignedComplaints } from "./staff.service";
 import { Request, Response } from "express";
 import { db } from "../../db";
-import { complaints } from "../../db/schema";
+import {
+  complaints,
+  hostels,
+  organizations,
+  securityProfiles,
+  staffProfiles,
+  users,
+} from "../../db/schema";
 import { eq } from "drizzle-orm";
 import {
   updateComplaintStatus,
   getStaffBySpecialization,
+  updateStaffStatus,
 } from "./staff.service";
+import redis from "../../config/redis";
 
 export const getAssignedComplaintsController = async (
   req: Authenticate,
@@ -60,6 +69,117 @@ export const getStaffBySpecializationController = async (
 
     const staff = await getStaffBySpecialization(specialization);
     return res.status(200).json(staff);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const getStaffProfileController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const cacheKey = `staff:profile:${user.userId}`;
+
+    const cachedProfile = await redis.get(cacheKey);
+    // if (cachedProfile) {
+    //   return res.json(JSON.parse(cachedProfile));
+    // }
+
+    const [profile] = await db
+      .select({
+        name: users.name,
+        email: users.email,
+        phone: staffProfiles.phone,
+        dateOfBirth: staffProfiles.dateOfBirth,
+        specialization: staffProfiles.specialization,
+        role: users.role,
+        organization: organizations.name,
+        hostel: hostels.name,
+        currentTasks: staffProfiles.currentTasks,
+        createdAt: users.createdAt,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .leftJoin(staffProfiles, eq(users.id, staffProfiles.userId))
+      .leftJoin(organizations, eq(users.organizationId, organizations.id))
+      .leftJoin(hostels, eq(users.hostelId, hostels.id))
+      .where(eq(users.id, user.userId));
+
+    await redis.set(cacheKey, JSON.stringify(profile), "EX", 86400);
+
+    return res.json({ ...profile });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const getSecurityProfileController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const cacheKey = `security:profile:${user.userId}`;
+
+    const cachedProfile = await redis.get(cacheKey);
+    // if (cachedProfile) {
+    //   return res.json(JSON.parse(cachedProfile));
+    // }
+
+    const [profile] = await db
+      .select({
+        name: users.name,
+        email: users.email,
+        phone: securityProfiles.phone,
+        dateOfBirth: securityProfiles.dateOfBirth,
+        assignedGate: securityProfiles.assignedGate,
+        shift: securityProfiles.shift,
+        role: users.role,
+        organization: organizations.name,
+        hostel: hostels.name,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .leftJoin(securityProfiles, eq(users.id, securityProfiles.userId))
+      .leftJoin(organizations, eq(users.organizationId, organizations.id))
+      .leftJoin(hostels, eq(users.hostelId, hostels.id))
+      .where(eq(users.id, user.userId));
+
+    // await redis.set(cacheKey, JSON.stringify(profile), "EX", 86400);
+
+    return res.json({ ...profile });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const updateStaffStatusController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { isActive } = req.body;
+    const userId = req.user!.userId;
+
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({ message: "isActive status is required" });
+    }
+
+    const updatedUser = await updateStaffStatus(userId, isActive);
+    return res.status(200).json(updatedUser);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });

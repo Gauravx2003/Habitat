@@ -6,6 +6,10 @@ import {
   getEscalatedComplaintsController,
   getComplaintCategoriesController,
   reassignComplaintController,
+  adminCloseComplaintController,
+  residentRejectResolutionController,
+  residentCloseComplaintController,
+  getComplaintHistoryController,
 } from "./complaints.controller";
 
 const router = Router();
@@ -17,20 +21,47 @@ router.get(
   "/my",
   authenticate,
   authorize(["RESIDENT"]),
-  getMyComplaintsController
+  getMyComplaintsController,
 );
 
 router.get(
   "/escalated",
   authenticate,
   authorize(["ADMIN"]),
-  getEscalatedComplaintsController
+  getEscalatedComplaintsController,
 );
 
 router.patch(
   "/reassign/:id",
   authenticate,
   authorize(["ADMIN"]),
-  reassignComplaintController
+  reassignComplaintController,
 );
+
+router.patch(
+  "/:id/close",
+  authenticate,
+  authorize(["RESIDENT"]),
+  residentCloseComplaintController,
+);
+
+// Resident rejects the work (Escalates to Admin)
+router.patch(
+  "/:id/reject",
+  authenticate,
+  authorize(["RESIDENT"]),
+  residentRejectResolutionController,
+);
+
+// --- ADMIN WORKFLOW ---
+// Admin forcefully closes a false or invalid escalation
+router.patch(
+  "/:id/admin-close",
+  authenticate,
+  authorize(["ADMIN"]),
+  adminCloseComplaintController,
+);
+
+router.get("/:id/history", authenticate, getComplaintHistoryController);
+
 export default router;

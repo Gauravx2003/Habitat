@@ -27,6 +27,8 @@ export const createResident = async (
     name: string;
     email: string;
     roomId: string;
+    phone: string;
+    dateOfBirth: string;
     enrollmentNumber?: string;
   },
 ) => {
@@ -82,6 +84,8 @@ export const createResident = async (
         userId: newUser.id,
         roomId: residentData.roomId,
         enrollmentNumber: residentData.enrollmentNumber || null,
+        phone: residentData.phone,
+        dateOfBirth: residentData.dateOfBirth,
       })
       .returning();
 
@@ -121,6 +125,8 @@ export const createStaff = async (
     email: string;
     staffType: "IN_HOUSE" | "VENDOR";
     specialization: string;
+    phone: string;
+    dateOfBirth: string;
   },
 ) => {
   //Check is user with email already exists
@@ -156,6 +162,8 @@ export const createStaff = async (
         userId: newUser.id,
         staffType: staffData.staffType,
         specialization: staffData.specialization,
+        phone: staffData.phone,
+        dateOfBirth: staffData.dateOfBirth,
       })
       .returning();
 

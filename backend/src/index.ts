@@ -44,7 +44,7 @@ app.get("/health", (_req: Request, res: Response) => {
 //   runEscalationJob().catch(console.error);
 // });
 
-// startLibraryCron();
+startLibraryCron();
 
 app.use("/api/auth", authRoutes);
 app.use("/api/test", testRoutes);

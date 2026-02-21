@@ -1,17 +1,30 @@
-import React, { useEffect } from "react";
-import { View, Text, SafeAreaView, ScrollView } from "react-native";
-import { useSelector } from "react-redux";
-import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useState, useCallback } from "react";
 import {
-  getAssignedComplaints,
-  AssignedComplaint,
-} from "../../src/services/staff.service";
-import { useState, useCallback } from "react";
-import { Alert } from "react-native";
-import { useFocusEffect } from "expo-router";
+  View,
+  Text,
+  SafeAreaView,
+  ScrollView,
+  Alert,
+  Switch,
+} from "react-native";
+import { useSelector, useDispatch } from "react-redux";
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 
 // @ts-ignore
 import { RootState } from "../../src/store/store";
+import { logout } from "../../src/store/authSlice";
+import {
+  getAssignedComplaints,
+  AssignedComplaint,
+  getStaffProfile,
+  updateStaffStatus,
+} from "../../src/services/staff.service";
+import { DashboardHeader } from "../../components/DashboardHeader";
+import {
+  ProfileMenuModal,
+  MenuOption,
+} from "../../components/ProfileMenuModal";
 
 const AnimatedNumber = ({ target, style }: { target: number; style: any }) => {
   const [count, setCount] = useState(0);
@@ -21,9 +34,7 @@ const AnimatedNumber = ({ target, style }: { target: number; style: any }) => {
     const end = target;
     if (start === end) return;
 
-    // Total animation time in ms
     const totalDuration = 1500;
-    // Increase step size for large numbers so it doesn't take forever
     const increment = Math.ceil(end / (totalDuration / 16));
 
     const timer = setInterval(() => {
@@ -34,7 +45,7 @@ const AnimatedNumber = ({ target, style }: { target: number; style: any }) => {
       } else {
         setCount(start);
       }
-    }, 16); // ~60fps
+    }, 16);
 
     return () => clearInterval(timer);
   }, [target]);
@@ -65,7 +76,6 @@ const StatBox = ({
       elevation: 2,
     }}
   >
-    {/* Use the animated component here */}
     <AnimatedNumber
       target={value}
       style={{
@@ -89,35 +99,112 @@ const StatBox = ({
 );
 
 export default function StaffDashboard() {
+  const router = useRouter();
+  const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.name || "Staff Member";
 
+  const [menuVisible, setMenuVisible] = useState(false);
   const [complaints, setComplaints] = useState<AssignedComplaint[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(false);
 
-  const fetchComplaints = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await getAssignedComplaints();
-      setComplaints(data);
+      const [complaintsData, profileData] = await Promise.all([
+        getAssignedComplaints(),
+        getStaffProfile(),
+      ]);
+      setComplaints(complaintsData);
+      setIsActive(profileData.isActive);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "Failed to fetch complaints");
+      Alert.alert("Error", "Failed to fetch dashboard data");
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleStatus = async () => {
+    try {
+      setStatusLoading(true);
+      const newStatus = !isActive;
+      setIsActive(newStatus);
+      await updateStaffStatus(newStatus);
+    } catch (error) {
+      console.error(error);
+      setIsActive(!isActive);
+      Alert.alert("Error", "Failed to update status");
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: () => {
+          dispatch(logout());
+          router.replace("/");
+        },
+      },
+    ]);
+  };
+
+  const menuOptions: MenuOption[] = [
+    {
+      label: "My Profile",
+      icon: "user",
+      color: "#4F46E5",
+      bg: "#EEF2FF",
+      onPress: () => {
+        setMenuVisible(false);
+        router.push("/(staff)/profile" as any);
+      },
+    },
+    {
+      label: "Notifications",
+      icon: "bell",
+      color: "#EA580C",
+      bg: "#FFF7ED",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Notification settings will be available soon.",
+        );
+      },
+    },
+    {
+      label: "Appearance",
+      icon: "sun",
+      color: "#0891B2",
+      bg: "#ECFEFF",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Appearance settings will be available soon.",
+        );
+      },
+    },
+  ];
+
   useFocusEffect(
     useCallback(() => {
-      fetchComplaints();
+      fetchData();
     }, []),
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchComplaints();
+    await fetchData();
     setRefreshing(false);
   };
 
@@ -139,91 +226,102 @@ export default function StaffDashboard() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 24,
-          }}
-        >
-          <View>
-            <Text style={{ fontSize: 14, color: "#6B7280", fontWeight: "500" }}>
-              Good Morning,
-            </Text>
-            <Text
-              style={{ fontSize: 24, fontWeight: "bold", color: "#111827" }}
-            >
-              {userName}
-            </Text>
-          </View>
-          <View
-            style={{
-              backgroundColor: "white",
-              padding: 10,
-              borderRadius: 20,
-              shadowColor: "#000",
-              shadowOpacity: 0.05,
-              shadowRadius: 5,
-            }}
-          >
-            <Feather name="bell" size={24} color="#374151" />
-          </View>
+        <View style={{ marginBottom: 24 }}>
+          <DashboardHeader
+            userName={userName}
+            avatarColor="#4F46E5"
+            onAvatarPress={() => setMenuVisible(true)}
+          />
         </View>
 
         {/* Status Card */}
         <View
           style={{
-            backgroundColor: "#4F46E5",
+            backgroundColor: isActive ? "#4F46E5" : "#EF4444",
             borderRadius: 20,
             padding: 20,
             marginBottom: 24,
-            shadowColor: "#4F46E5",
+            shadowColor: isActive ? "#4F46E5" : "#EF4444",
             shadowOpacity: 0.3,
             shadowRadius: 10,
           }}
         >
-          <Text
+          <View
             style={{
-              color: "#E0E7FF",
-              fontSize: 14,
-              fontWeight: "500",
-              marginBottom: 4,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
             }}
           >
-            Current Status
-          </Text>
-          <Text style={{ color: "white", fontSize: 28, fontWeight: "bold" }}>
-            On Duty
-          </Text>
-          <Text style={{ color: "#C7D2FE", fontSize: 12, marginTop: 8 }}>
-            You are currently marked as available.
+            <View>
+              <Text
+                style={{
+                  color: isActive ? "#E0E7FF" : "#FEE2E2",
+                  fontSize: 14,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                Current Status
+              </Text>
+              <Text
+                style={{ color: "white", fontSize: 28, fontWeight: "bold" }}
+              >
+                {isActive ? "On Duty" : "Inactive"}
+              </Text>
+            </View>
+            <Switch
+              trackColor={{ false: "#767577", true: "#818cf8" }}
+              thumbColor={isActive ? "#ffffff" : "#f4f3f4"}
+              ios_backgroundColor="#3e3e3e"
+              onValueChange={toggleStatus}
+              value={isActive}
+              disabled={statusLoading}
+            />
+          </View>
+          <Text
+            style={{
+              color: isActive ? "#C7D2FE" : "#FEE2E2",
+              fontSize: 12,
+              marginTop: 8,
+            }}
+          >
+            {isActive
+              ? "You are currently marked as available."
+              : "You are not receiving new tasks."}
           </Text>
         </View>
 
-        {/* Quick Stats (Placeholder) */}
-        {/* Grid Container */}
+        {/* Stats Grid */}
         <View style={{ gap: 12, marginBottom: 24 }}>
-          {/* Row 1: Top Corners */}
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatBox value={assigned} label="Currently Assigned" />
             <StatBox value={inProgress} label="In Progress" />
           </View>
 
-          {/* Row 2: The Center (Total) */}
           <View style={{ flexDirection: "row", justifyContent: "center" }}>
             <View style={{ width: "50%" }}>
               <StatBox value={total} label="Total" highlight />
             </View>
           </View>
 
-          {/* Row 3: Bottom Corners */}
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatBox value={resolved} label="Resolved" />
             <StatBox value={escalated} label="Escalated" />
           </View>
         </View>
       </ScrollView>
+
+      {/* Profile Menu */}
+      <ProfileMenuModal
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        userName={userName}
+        userEmail={user?.email}
+        avatarColor="#4F46E5"
+        menuOptions={menuOptions}
+        onLogout={handleLogout}
+      />
     </SafeAreaView>
   );
 }

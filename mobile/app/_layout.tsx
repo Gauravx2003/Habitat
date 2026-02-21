@@ -6,6 +6,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
+import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
+
+SplashScreen.preventAutoHideAsync();
 
 // 1. Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -20,6 +24,20 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   const router = useRouter();
+
+  const [fontsLoaded] = useFonts({
+    SNProMedium: require("../assets/fonts/SNProMedium.ttf"),
+    SNProBold: require("../assets/fonts/SNProBold.ttf"),
+    SNProBlack: require("../assets/fonts/SNProBlack.ttf"),
+    SNProRegular: require("../assets/fonts/SNProRegular.ttf"),
+    SNProExtraBold: require("../assets/fonts/SNProExtraBold.ttf"),
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
 
   useEffect(() => {
     // 2. This listener fires when the user TAPS the notification
@@ -43,6 +61,8 @@ export default function RootLayout() {
     };
   }, []);
 
+  if (!fontsLoaded) return null;
+
   return (
     <Provider store={store}>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -50,6 +70,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="(resident)" options={{ headerShown: false }} />
           <Stack.Screen name="(security)" options={{ headerShown: false }} />
+          <Stack.Screen name="(staff)" options={{ headerShown: false }} />
         </Stack>
       </GestureHandlerRootView>
     </Provider>

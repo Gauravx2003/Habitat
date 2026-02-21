@@ -5,6 +5,8 @@ import {
   users,
   staffProfiles,
   rooms,
+  escalations,
+  complaintStatusHistory,
 } from "../../db/schema";
 import { createNotification } from "../notifications/notifications.service";
 
@@ -15,6 +17,8 @@ import {
   sql,
   getTableColumns,
   aliasedTable,
+  lt,
+  asc,
 } from "drizzle-orm";
 
 export const createComplaint = async (
@@ -24,8 +28,7 @@ export const createComplaint = async (
   description: string,
   title?: string,
 ) => {
-  //Fetch category ( for SLA )
-
+  // Fetch category (for SLA)
   const [category] = await db
     .select()
     .from(complaintCategories)
@@ -35,39 +38,33 @@ export const createComplaint = async (
     throw new Error("Category not found");
   }
 
-  //Finding Staff for resolving the complaint
-  const result = await db.execute(
-    sql`
-    SELECT 
-      u.id AS "staffId",
-      COUNT(c.id) AS "activeCount",
-      sp.max_active_tasks AS "maxTasks"
-    FROM users u
-    JOIN staff_profiles sp
-      ON u.id = sp.user_id
-    LEFT JOIN complaints c
-      ON c.assigned_staff = u.id
-     AND c.status IN ('ASSIGNED', 'IN_PROGRESS')
-    WHERE 
-      u.role = 'STAFF'
-      AND sp.staff_type = 'IN_HOUSE'
-      AND sp.specialization = ${category.name}
-    GROUP BY u.id, sp.max_active_tasks
-    HAVING COUNT(c.id) < sp.max_active_tasks
-    ORDER BY COUNT(c.id) ASC
-    LIMIT 1
-  `,
-  );
+  // 1. Finding Staff for resolving the complaint (Optimized Query)
+  const result = await db
+    .select({
+      staffId: users.id,
+    })
+    .from(users)
+    .innerJoin(staffProfiles, eq(users.id, staffProfiles.userId))
+    .where(
+      and(
+        eq(users.role, "STAFF"),
+        eq(staffProfiles.staffType, "IN_HOUSE"),
+        eq(staffProfiles.specialization, category.name),
+        eq(users.isActive, true),
+        lt(staffProfiles.currentTasks, staffProfiles.maxActiveTasks), // Compares two columns directly
+      ),
+    )
+    .orderBy(asc(staffProfiles.currentTasks))
+    .limit(1);
 
-  const assignedStaff =
-    result.rows.length > 0 ? (result.rows[0].staffId as string) : null;
+  const assignedStaff = result.length > 0 ? result[0].staffId : null;
 
   const slaDeadline = new Date();
   slaDeadline.setHours(slaDeadline.getHours() + category.slaHours);
 
+  // 2. Execute Transaction
   return await db.transaction(async (tx) => {
-    //1. Create Complaint
-
+    // A. Create Complaint
     const [complaint] = await tx
       .insert(complaints)
       .values({
@@ -82,8 +79,17 @@ export const createComplaint = async (
       })
       .returning();
 
-    //2. Create notification
+    // B. Handle Staff Assignment Side Effects
     if (assignedStaff) {
+      // Increment the current_tasks counter for the assigned staff
+      await tx
+        .update(staffProfiles)
+        .set({
+          currentTasks: sql`${staffProfiles.currentTasks} + 1`,
+        })
+        .where(eq(staffProfiles.userId, assignedStaff));
+
+      // Create notification
       await createNotification(tx, assignedStaff, "You have a new complaint");
     }
 
@@ -211,6 +217,11 @@ export const reassignComplaint = async (
       throw new Error("Staff is not a valid staff member");
     }
 
+    await tx
+      .update(staffProfiles)
+      .set({ currentTasks: sql`${staffProfiles.currentTasks} + 1` })
+      .where(eq(staffProfiles.userId, newStaffId));
+
     const newSLADeadline = new Date();
     newSLADeadline.setHours(
       newSLADeadline.getHours() + existingComplaint.slaHours,
@@ -227,9 +238,179 @@ export const reassignComplaint = async (
       .where(eq(complaints.id, complaintId))
       .returning();
 
+    await tx.insert(complaintStatusHistory).values({
+      complaintId,
+      newStatus: "ASSIGNED",
+      oldStatus: existingComplaint.status,
+      changedAt: new Date(),
+      changedBy: adminId,
+    });
+
     //Create notification for the staff
     await createNotification(tx, newStaffId, "You have a new complaint");
 
     return updatedComplaint;
   });
+};
+
+export const residentCloseComplaint = async (
+  complaintId: string,
+  residentId: string,
+) => {
+  const [complaint] = await db
+    .select()
+    .from(complaints)
+    .where(
+      and(
+        eq(complaints.id, complaintId),
+        eq(complaints.residentId, residentId),
+      ),
+    );
+
+  if (!complaint) throw new Error("Complaint not found or unauthorized");
+  if (complaint.status !== "RESOLVED")
+    throw new Error("Only RESOLVED complaints can be closed");
+
+  const [closedComplaint] = await db
+    .update(complaints)
+    .set({ status: "CLOSED" })
+    .where(eq(complaints.id, complaintId))
+    .returning();
+
+  return closedComplaint;
+};
+
+export const residentRejectResolution = async (
+  complaintId: string,
+  residentId: string,
+  reason: string,
+) => {
+  return db.transaction(async (tx) => {
+    const [complaint] = await tx
+      .select()
+      .from(complaints)
+      .where(
+        and(
+          eq(complaints.id, complaintId),
+          eq(complaints.residentId, residentId),
+        ),
+      );
+
+    if (!complaint) throw new Error("Complaint not found or unauthorized");
+    if (complaint.status !== "RESOLVED")
+      throw new Error("Only RESOLVED complaints can be rejected");
+
+    const [escalatedComplaint] = await tx
+      .update(complaints)
+      .set({ status: "ESCALATED" })
+      .where(eq(complaints.id, complaintId))
+      .returning();
+
+    await tx.insert(complaintStatusHistory).values({
+      complaintId,
+      newStatus: "ESCALATED",
+      oldStatus: complaint.status,
+      changedAt: new Date(),
+      changedBy: residentId,
+    });
+
+    const [admin] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.role, "ADMIN"));
+    const now = new Date();
+
+    await tx.insert(escalations).values({
+      complaintId: complaint.id,
+      level: 1,
+      escalatedTo: admin?.id,
+      escalatedAt: now,
+      reason,
+    });
+
+    // Note: It will now appear in the Admin's getEscalatedComplaints view
+    return escalatedComplaint;
+  });
+};
+
+export const adminCloseComplaint = async (complaintId: string) => {
+  // Admin forceful closure (e.g., resident made a false claim)
+  const [closedComplaint] = await db
+    .update(complaints)
+    .set({ status: "CLOSED" })
+    .where(eq(complaints.id, complaintId))
+    .returning();
+
+  return closedComplaint;
+};
+
+export const autoAssignPendingComplaint = async (tx: any, staffId: string) => {
+  // 1. Get the staff member's profile and specialization
+  const [staff] = await tx
+    .select()
+    .from(staffProfiles)
+    .where(eq(staffProfiles.userId, staffId));
+
+  if (!staff || staff.currentTasks >= staff.maxActiveTasks) return;
+
+  // 2. Find the OLDEST "CREATED" complaint that matches their specialization
+  const pendingComplaints = await tx
+    .select({
+      id: complaints.id,
+      slaHours: complaintCategories.slaHours,
+    })
+    .from(complaints)
+    .innerJoin(
+      complaintCategories,
+      eq(complaints.categoryId, complaintCategories.id),
+    )
+    .where(
+      and(
+        eq(complaints.status, "CREATED"),
+        eq(complaintCategories.name, staff.specialization),
+      ),
+    )
+    .orderBy(asc(complaints.createdAt)) // Oldest first (FIFO queue)
+    .limit(1);
+
+  // If no pending complaints exist for this specialization, do nothing
+  if (pendingComplaints.length === 0) return;
+
+  const nextComplaint = pendingComplaints[0];
+
+  // 3. Calculate a FRESH SLA deadline since it's only just being assigned
+  const newSlaDeadline = new Date();
+  newSlaDeadline.setHours(newSlaDeadline.getHours() + nextComplaint.slaHours);
+
+  // 4. Assign the complaint
+  await tx
+    .update(complaints)
+    .set({
+      assignedStaff: staffId,
+      status: "ASSIGNED",
+      slaDeadline: newSlaDeadline,
+    })
+    .where(eq(complaints.id, nextComplaint.id));
+
+  await tx.insert(complaintStatusHistory).values({
+    complaintId: nextComplaint.id,
+    newStatus: "ASSIGNED",
+    oldStatus: "CREATED",
+    changedAt: new Date(),
+  });
+
+  // 5. Re-increment the staff member's task count (since we just gave them a new one)
+  await tx
+    .update(staffProfiles)
+    .set({
+      currentTasks: sql`${staffProfiles.currentTasks} + 1`,
+    })
+    .where(eq(staffProfiles.userId, staffId));
+
+  // 6. Notify the staff member
+  await createNotification(
+    tx,
+    staffId,
+    "A pending complaint has been auto-assigned to you from the queue.",
+  );
 };

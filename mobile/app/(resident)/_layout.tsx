@@ -65,14 +65,11 @@ export default function ResidentLayout() {
         }}
       />
 
-      {/* 4. PROFILE (Visible) */}
+      {/* 4. PROFILE (Hidden from tabs - accessible via Dashboard avatar menu) */}
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) => (
-            <Feather name="user" size={24} color={color} />
-          ),
+          href: null, // <--- Hidden from bottom tabs, navigable via avatar modal
         }}
       />
 
@@ -113,6 +110,12 @@ export default function ResidentLayout() {
       />
       <Tabs.Screen
         name="campus-hub"
+        options={{
+          href: null, // <--- Hides this tab
+        }}
+      />
+      <Tabs.Screen
+        name="payments"
         options={{
           href: null, // <--- Hides this tab
         }}

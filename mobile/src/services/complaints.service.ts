@@ -5,7 +5,15 @@ export interface Complaint {
   id: string;
   title: string;
   description: string;
-  status: "PENDING" | "IN_PROGRESS" | "RESOLVED" | "REJECTED" | "ESCALATED";
+  status:
+    | "CREATED"
+    | "ASSIGNED"
+    | "PENDING"
+    | "IN_PROGRESS"
+    | "RESOLVED"
+    | "CLOSED"
+    | "REJECTED"
+    | "ESCALATED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "EMERGENCY";
   categoryId: string;
   categoryName: string; // Joined from backend
@@ -14,6 +22,7 @@ export interface Complaint {
   roomId: string;
   residentId: string;
   staffName?: string;
+  attachments?: { id: string; fileURL: string }[];
 }
 
 export interface ComplaintCategory {
@@ -49,5 +58,37 @@ export const raiseComplaint = async (
   payload: CreateComplaintPayload,
 ): Promise<Complaint> => {
   const response = await api.post("/complaints", payload);
+  return response.data;
+};
+
+// 4. Close a Resolved Complaint (Resident accepts the resolution)
+export const closeComplaint = async (complaintId: string) => {
+  const response = await api.patch(`/complaints/${complaintId}/close`);
+  return response.data;
+};
+
+// 5. Reject a Resolution (Resident is not satisfied → Escalates to Admin)
+export const rejectResolution = async (complaintId: string, reason: string) => {
+  const response = await api.patch(`/complaints/${complaintId}/reject`, {
+    reason,
+  });
+  return response.data;
+};
+
+// 6. Get Complaint Status History
+export interface StatusHistoryEntry {
+  id: string;
+  complaintId: string;
+  oldStatus: string;
+  newStatus: string;
+  changedBy: string | null;
+  changedByName: string | null;
+  changedAt: string;
+}
+
+export const getComplaintHistory = async (
+  complaintId: string,
+): Promise<StatusHistoryEntry[]> => {
+  const response = await api.get(`/complaints/${complaintId}/history`);
   return response.data;
 };

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -7,22 +7,94 @@ import {
   Animated,
   ImageBackground,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 // @ts-ignore
 import { RootState } from "../../src/store/store";
+import { logout, User } from "../../src/store/authSlice";
 import { getCampusHubData } from "../../src/services/campusHub.service";
 import { registerForPushNotificationsAsync } from "@/src/utils/notificationHelper";
 import { notificationsService } from "@/src/services/notifications.service";
+import { DashboardHeader } from "../../components/DashboardHeader";
+import {
+  ProfileMenuModal,
+  MenuOption,
+} from "../../components/ProfileMenuModal";
 
 export default function ResidentDashboard() {
   const router = useRouter();
+  const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.name || "Student";
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: () => {
+          dispatch(logout());
+          router.replace("/");
+        },
+      },
+    ]);
+  };
+
+  const menuOptions: MenuOption[] = [
+    {
+      label: "Profile",
+      icon: "user",
+      color: "#2563EB",
+      bg: "#EFF6FF",
+      onPress: () => {
+        setMenuVisible(false);
+        router.push("/(resident)/profile" as any);
+      },
+    },
+    {
+      label: "Change Password",
+      icon: "lock",
+      color: "#7C3AED",
+      bg: "#F5F3FF",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert("Coming Soon", "Change Password will be available soon.");
+      },
+    },
+    {
+      label: "Notifications",
+      icon: "bell",
+      color: "#EA580C",
+      bg: "#FFF7ED",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Notification settings will be available soon.",
+        );
+      },
+    },
+    {
+      label: "Appearance",
+      icon: "sun",
+      color: "#0891B2",
+      bg: "#ECFEFF",
+      onPress: () => {
+        setMenuVisible(false);
+        Alert.alert(
+          "Coming Soon",
+          "Appearance settings will be available soon.",
+        );
+      },
+    },
+  ];
 
   // ── Animations ──────────────────────────────────────────
   const bannerPulse = useRef(new Animated.Value(1)).current;
@@ -135,6 +207,13 @@ export default function ResidentDashboard() {
       color: "bg-indigo-100",
       iconColor: "#4F46E5",
     },
+    {
+      label: "Payments",
+      icon: "credit-card",
+      route: "/(resident)/payments",
+      color: "bg-green-100",
+      iconColor: "#10B981",
+    },
   ];
 
   // ── Data Fetching ───────────────────────────────────────
@@ -186,28 +265,23 @@ export default function ResidentDashboard() {
     >
       <ScrollView className="px-5 pt-5 pb-20">
         {/* 1. Header Section */}
-        <View className="flex-row justify-between items-center mb-6">
-          <View>
-            <Text className="text-gray-500 text-sm font-medium">
-              Good Morning,
-            </Text>
-            <Text className="text-2xl font-bold text-gray-900">{userName}</Text>
-          </View>
-          <TouchableOpacity className="bg-white p-2 rounded-full shadow-sm">
-            <Feather name="bell" size={24} color="#374151" />
-          </TouchableOpacity>
+        <View className="mb-6">
+          <DashboardHeader
+            userName={userName}
+            onAvatarPress={() => setMenuVisible(true)}
+          />
         </View>
 
         {/* 2. Status Card */}
         <View className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex-row items-center justify-between mb-6">
           <View className="flex-row items-center space-x-3">
             <View className="h-3 w-3 bg-green-500 rounded-full" />
-            <Text className="text-gray-700 font-semibold text-base ml-2">
+            <Text className="font-sn-pro-medium text-gray-700 text-base ml-2">
               Status: In Hostel
             </Text>
           </View>
           <TouchableOpacity>
-            <Text className="text-blue-600 font-medium">Change</Text>
+            <Text className="font-sn-pro-medium text-blue-600">Change</Text>
           </TouchableOpacity>
         </View>
 
@@ -318,18 +392,21 @@ export default function ResidentDashboard() {
                 <View className="flex-1">
                   <View className="flex-row items-center mb-1">
                     <View className="bg-red-500 px-2 py-0.5 rounded mr-2">
-                      <Text className="text-white text-xs font-bold">
+                      <Text className="font-sn-pro-bold text-white text-xs">
                         URGENT
                       </Text>
                     </View>
-                    <Text className="text-gray-400 text-xs">
+                    <Text className="font-sn-pro-medium text-gray-400 text-xs">
                       {new Date(urgentNotice.createdAt).toLocaleDateString()}
                     </Text>
                   </View>
-                  <Text className="text-red-800 font-bold text-base mb-0.5">
+                  <Text className="font-sn-pro-bold text-red-800 text-base mb-0.5">
                     {urgentNotice.title}
                   </Text>
-                  <Text className="text-red-600/70 text-sm" numberOfLines={2}>
+                  <Text
+                    className="font-sn-pro-medium text-red-600/70 text-sm"
+                    numberOfLines={2}
+                  >
                     {urgentNotice.description}
                   </Text>
                 </View>
@@ -346,8 +423,7 @@ export default function ResidentDashboard() {
         )}
 
         {/* 3. Smart Mess Widget (Feature Card) */}
-        <View className="bg-blue-600 rounded-3xl p-5 mb-8 shadow-lg relative overflow-hidden">
-          {/* Decorative Circle */}
+        {/* <View className="bg-blue-600 rounded-3xl p-5 mb-8 shadow-lg relative overflow-hidden">
           <View className="absolute -right-10 -top-10 h-32 w-32 bg-blue-500 rounded-full opacity-50" />
 
           <View className="flex-row justify-between items-start">
@@ -371,31 +447,43 @@ export default function ResidentDashboard() {
               <View className="h-4 w-4 bg-green-500 rounded-full" />
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* 4. Quick Actions Grid */}
-        <Text className="text-lg font-bold text-gray-900 mb-4">
+        <Text className="font-sn-pro-bold text-lg text-gray-900 mb-4">
           Quick Actions
         </Text>
         <View className="flex-row flex-wrap justify-between">
           {actions.map((action, index) => (
             <TouchableOpacity
               key={index}
-              className="w-[48%] bg-white p-4 rounded-2xl mb-4 shadow-sm border border-gray-100 items-center justify-center space-y-2"
+              className="w-[31%] bg-white p-3 rounded-2xl mb-4 shadow-sm border border-gray-100 items-center justify-center space-y-2"
               onPress={() => router.push(action.route as any)}
             >
               <View className={`p-3 rounded-full ${action.color} mb-2`}>
                 <Feather
                   name={action.icon as any}
-                  size={24}
+                  size={22}
                   color={action.iconColor}
                 />
               </View>
-              <Text className="font-medium text-gray-700">{action.label}</Text>
+              <Text className="font-sn-pro-medium text-center text-xs text-gray-700">
+                {action.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
+
+      {/* Profile Menu */}
+      <ProfileMenuModal
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        userName={userName}
+        userEmail={user?.email}
+        menuOptions={menuOptions}
+        onLogout={handleLogout}
+      />
 
       {/* 5. SOS Button (Floating) */}
       <TouchableOpacity
@@ -446,7 +534,7 @@ const styles = StyleSheet.create({
   liveText: {
     color: "white",
     fontSize: 10,
-    fontWeight: "bold",
+    fontFamily: "SNProBold",
   },
   contentContainer: {
     width: "100%",
@@ -459,18 +547,19 @@ const styles = StyleSheet.create({
   typeText: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 10,
-    fontWeight: "600",
+    fontFamily: "SNProBold",
     marginLeft: 6,
     letterSpacing: 1,
   },
   eventTitle: {
     color: "white",
     fontSize: 24,
-    fontWeight: "bold",
+    fontFamily: "SNProBlack",
   },
   eventSub: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 14,
+    fontFamily: "SNProMedium",
     marginBottom: 12,
   },
   actionBar: {
@@ -487,8 +576,89 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: "white",
-    fontWeight: "600",
+    fontFamily: "SNProBold",
     marginLeft: 8,
     fontSize: 13,
+  },
+
+  // Modal styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 12,
+  },
+  modalAvatar: {
+    height: 52,
+    width: 52,
+    borderRadius: 26,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalAvatarText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 20,
+  },
+  modalUserName: {
+    fontSize: 18,
+    fontFamily: "SNProBold",
+    color: "#111827",
+  },
+  modalUserEmail: {
+    fontSize: 13,
+    fontFamily: "SNProMedium",
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 8,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 14,
+  },
+  menuIconCircle: {
+    height: 40,
+    width: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "SNProBold",
+    color: "#1F2937",
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 14,
+  },
+  logoutText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "SNProBold",
+    color: "#DC2626",
   },
 });

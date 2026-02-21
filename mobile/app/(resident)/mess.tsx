@@ -13,10 +13,13 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  Image,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
+import * as ImagePicker from "expo-image-picker";
 
 import {
   messService,
@@ -50,6 +53,10 @@ export default function MessScreen() {
   const [issueTitle, setIssueTitle] = useState("");
   const [complaintDesc, setComplaintDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+
+  // Fullscreen Image Viewer
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   // State for Opt-In interaction
   const [optingIn, setOptingIn] = useState(false);
@@ -94,9 +101,12 @@ export default function MessScreen() {
     try {
       setLoadingMenu(true);
       const data = await messService.getDailyMenu();
-      setMenu(data);
-
-      // Determine active meal based on time (optional improvement for later)
+      // Sort chronologically so Breakfast → Lunch → Snacks → Dinner
+      const sorted = [...data].sort(
+        (a, b) =>
+          new Date(a.servingTime).getTime() - new Date(b.servingTime).getTime(),
+      );
+      setMenu(sorted);
     } catch (error) {
       console.error("Failed to fetch menu", error);
       Alert.alert("Error", "Failed to load menu");
@@ -177,6 +187,29 @@ export default function MessScreen() {
     if (activeTab === "issues") fetchIssues();
   };
 
+  const pickImages = async () => {
+    if (selectedImages.length >= 5) {
+      Alert.alert("Limit", "You can attach up to 5 images.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: 5 - selectedImages.length,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const uris = result.assets.map((a) => a.uri);
+      setSelectedImages((prev) => [...prev, ...uris].slice(0, 5));
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmitComplaint = async () => {
     if (!issueTitle.trim() || !complaintDesc.trim()) {
       Alert.alert("Error", "Please fill in all fields.");
@@ -185,15 +218,26 @@ export default function MessScreen() {
 
     try {
       setSubmitting(true);
-      await messService.createIssue({
+      const newIssue = await messService.createIssue({
         issueTitle,
         issueDescription: complaintDesc,
         category: complaintType,
       });
 
+      // Upload attachments if any
+      if (selectedImages.length > 0 && newIssue?.id) {
+        try {
+          await messService.uploadIssueAttachments(newIssue.id, selectedImages);
+        } catch (uploadErr) {
+          console.error("Failed to upload attachments:", uploadErr);
+          // Issue was still created; don't block
+        }
+      }
+
       setModalVisible(false);
       setIssueTitle("");
       setComplaintDesc("");
+      setSelectedImages([]);
       Alert.alert(
         "Complaint Registered",
         "The mess manager has been notified.",
@@ -286,6 +330,27 @@ export default function MessScreen() {
             <Text style={styles.issueDesc} numberOfLines={2}>
               {item.issueDescription}
             </Text>
+            {/* Attachment Thumbnails */}
+            {item.attachments && item.attachments.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.attachmentRow}
+              >
+                {item.attachments.map((att) => (
+                  <TouchableOpacity
+                    key={att.id}
+                    onPress={() => setViewerImage(att.fileURL)}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{ uri: att.fileURL }}
+                      style={styles.attachmentThumb}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
             {item.adminResponse && (
               <View style={styles.adminResponse}>
                 <Text style={styles.adminResponseLabel}>Admin Response:</Text>
@@ -299,6 +364,35 @@ export default function MessScreen() {
       />
     );
   };
+
+  // ─── Fullscreen Image Viewer ───
+  const renderImageViewer = () => (
+    <Modal
+      visible={!!viewerImage}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setViewerImage(null)}
+    >
+      <Pressable
+        style={styles.imageViewerBackdrop}
+        onPress={() => setViewerImage(null)}
+      >
+        <TouchableOpacity
+          style={styles.imageViewerClose}
+          onPress={() => setViewerImage(null)}
+        >
+          <Feather name="x" size={24} color="white" />
+        </TouchableOpacity>
+        {viewerImage && (
+          <Image
+            source={{ uri: viewerImage }}
+            style={styles.imageViewerFull}
+            resizeMode="contain"
+          />
+        )}
+      </Pressable>
+    </Modal>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -443,11 +537,6 @@ export default function MessScreen() {
                       thumbColor={isOptedIn ? "#ffffff" : "#f4f3f4"}
                       onValueChange={handleOptInToggle}
                       value={isOptedIn}
-                      disabled={
-                        optingIn ||
-                        targetMeal.status === "SCANNED" ||
-                        new Date() > new Date(targetMeal.cutoffTime)
-                      }
                     />
                   )}
                 </View>
@@ -645,6 +734,39 @@ export default function MessScreen() {
               onChangeText={setComplaintDesc}
             />
 
+            {/* Image Picker Section */}
+            <Text style={styles.label}>Attach Photos (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pickerRow}
+            >
+              {selectedImages.map((uri, idx) => (
+                <View key={idx} style={styles.pickerThumbWrap}>
+                  <Image source={{ uri }} style={styles.pickerThumb} />
+                  <TouchableOpacity
+                    style={styles.pickerRemoveBtn}
+                    onPress={() => removeImage(idx)}
+                  >
+                    <Feather name="x" size={14} color="white" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {selectedImages.length < 5 && (
+                <TouchableOpacity
+                  style={styles.pickerAddBtn}
+                  onPress={pickImages}
+                >
+                  <Feather name="camera" size={22} color="#94A3B8" />
+                  <Text style={styles.pickerAddText}>
+                    {selectedImages.length === 0
+                      ? "Add"
+                      : `${selectedImages.length}/5`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+
             <TouchableOpacity
               style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
               onPress={handleSubmitComplaint}
@@ -659,6 +781,9 @@ export default function MessScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Fullscreen Image Viewer */}
+      {renderImageViewer()}
     </SafeAreaView>
   );
 }
@@ -950,5 +1075,82 @@ const styles = StyleSheet.create({
   submitBtnDisabled: {
     backgroundColor: "#DC2626", // Lighter red or different shade
     opacity: 0.7,
+  },
+  // Attachment Thumbnails
+  attachmentRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    paddingBottom: 4,
+  },
+  attachmentThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+  },
+
+  // Fullscreen Image Viewer
+  imageViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  imageViewerFull: {
+    width: width - 32,
+    height: width - 32,
+    borderRadius: 12,
+  },
+
+  // Image Picker
+  pickerRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+    paddingBottom: 4,
+  },
+  pickerThumbWrap: {
+    position: "relative",
+  },
+  pickerThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+  },
+  pickerRemoveBtn: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "#EF4444",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerAddBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  pickerAddText: {
+    fontSize: 11,
+    color: "#94A3B8",
+    fontWeight: "600",
   },
 });

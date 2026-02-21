@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import {
   getAssignedComplaints,
   updateComplaintStatus,
+  getStaffProfile,
   AssignedComplaint,
 } from "../../src/services/staff.service";
 
@@ -24,14 +25,20 @@ export default function WorkScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const fetchComplaints = async () => {
+  const [isActive, setIsActive] = useState(true);
+
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await getAssignedComplaints();
-      setComplaints(data);
+      const [complaintsData, profileData] = await Promise.all([
+        getAssignedComplaints(),
+        getStaffProfile(),
+      ]);
+      setComplaints(complaintsData);
+      setIsActive(profileData.isActive);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "Failed to fetch complaints");
+      Alert.alert("Error", "Failed to fetch work data");
     } finally {
       setLoading(false);
     }
@@ -39,13 +46,13 @@ export default function WorkScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchComplaints();
+      fetchData();
     }, []),
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchComplaints();
+    await fetchData();
     setRefreshing(false);
   };
 
@@ -53,11 +60,19 @@ export default function WorkScreen() {
     id: string,
     newStatus: "IN_PROGRESS" | "RESOLVED",
   ) => {
+    if (!isActive) {
+      Alert.alert(
+        "Status Inactive",
+        "You are currently marked as inactive. Please switch to 'On Duty' in the Dashboard to perform actions.",
+      );
+      return;
+    }
+
     try {
       setUpdatingId(id);
       await updateComplaintStatus(id, newStatus);
       // Optimistic update or refetch
-      fetchComplaints();
+      fetchData();
     } catch (error) {
       console.error(error);
       Alert.alert("Error", "Failed to update status");
@@ -163,8 +178,11 @@ export default function WorkScreen() {
         <View style={styles.actionContainer}>
           {item.status === "ASSIGNED" && (
             <TouchableOpacity
-              style={styles.actionBtnPrimary}
-              disabled={updatingId === item.id}
+              style={[
+                styles.actionBtnPrimary,
+                !isActive && styles.actionBtnDisabled,
+              ]}
+              disabled={updatingId === item.id || !isActive}
               onPress={() => handleStatusUpdate(item.id, "IN_PROGRESS")}
             >
               {updatingId === item.id ? (
@@ -177,8 +195,11 @@ export default function WorkScreen() {
 
           {item.status === "IN_PROGRESS" && (
             <TouchableOpacity
-              style={styles.actionBtnSuccess}
-              disabled={updatingId === item.id}
+              style={[
+                styles.actionBtnSuccess,
+                !isActive && styles.actionBtnDisabled,
+              ]}
+              disabled={updatingId === item.id || !isActive}
               onPress={() => handleStatusUpdate(item.id, "RESOLVED")}
             >
               {updatingId === item.id ? (
@@ -214,6 +235,15 @@ export default function WorkScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Assigned Work</Text>
       </View>
+
+      {!isActive && !loading && (
+        <View style={styles.inactiveBanner}>
+          <Feather name="pause-circle" size={16} color="#B91C1C" />
+          <Text style={styles.inactiveText}>
+            You are currently inactive. Switch to "On Duty" to perform actions.
+          </Text>
+        </View>
+      )}
 
       <FlatList
         data={complaints}
@@ -347,4 +377,23 @@ const styles = StyleSheet.create({
   textYellow: { color: "#CA8A04" },
   bgGray: { backgroundColor: "#F3F4F6" },
   textGray: { color: "#4B5563" },
+  actionBtnDisabled: {
+    backgroundColor: "#9CA3AF",
+    opacity: 0.7,
+  },
+  inactiveBanner: {
+    backgroundColor: "#FEF2F2",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FECACA",
+  },
+  inactiveText: {
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "600",
+  },
 });

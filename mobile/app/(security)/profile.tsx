@@ -1,43 +1,39 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 import { useDispatch } from "react-redux";
 // @ts-ignore
 import { logout } from "../../src/store/authSlice";
 import { authService } from "../../src/services/auth.service";
 import {
-  getStaffProfile,
-  StaffProfile,
+  getSecurityProfile,
+  SecurityProfile,
 } from "../../src/services/staff.service";
 import { ProfileFooter } from "../../components/ProfileFooter";
 import { FlipIdCard } from "../../components/FlipIdCard";
 
-export default function ProfileScreen() {
+export default function SecurityProfileScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [profile, setProfile] = useState<SecurityProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await getStaffProfile();
+      const data = await getSecurityProfile();
       setProfile(data);
     } catch (error) {
-      console.log("Error fetching staff profile:", error);
+      console.log("Error fetching security profile:", error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchData();
-    }, []),
-  );
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -71,15 +67,12 @@ export default function ProfileScreen() {
           organization={profile?.organization}
           hostel={profile?.hostel}
           subLabel={profile?.role}
-          badge={profile?.specialization}
-          backTitle="WORK DETAILS"
+          badge={profile?.assignedGate}
+          backTitle="SECURITY DETAILS"
           backItems={[
-            { label: "CURRENT TASKS", value: profile?.currentTasks ?? 0 },
-            {
-              label: "SPECIALIZATION",
-              value: profile?.specialization || "N/A",
-            },
-            { label: "ROLE", value: profile?.role || "STAFF" },
+            { label: "ASSIGNED GATE", value: profile?.assignedGate || "N/A" },
+            { label: "SHIFT", value: profile?.shift || "N/A" },
+            { label: "ROLE", value: profile?.role || "SECURITY" },
             {
               label: "DATE OF BIRTH",
               value: profile?.dateOfBirth
