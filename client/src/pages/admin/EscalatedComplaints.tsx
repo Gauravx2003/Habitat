@@ -10,7 +10,10 @@ import {
   CheckCircle2,
   Clock,
   FileText,
+  Home,
+  User,
   UserCheck,
+  UserRoundX,
   X,
 } from "lucide-react";
 
@@ -22,6 +25,7 @@ interface Complaint {
   categoryName: string;
   residentName: string;
   roomNumber: string;
+  block: string;
   assignedStaffName?: string;
   createdAt: string;
   priority: string;
@@ -157,7 +161,7 @@ const EscalatedComplaints = () => {
           <p className="text-slate-600">No escalated complaints</p>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3">
           {escalatedComplaints.map((complaint) => (
             <div
               key={complaint.id}
@@ -194,24 +198,39 @@ const EscalatedComplaints = () => {
                 <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded">
                   {complaint.categoryName}
                 </span>
-                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                  {complaint.residentName}
-                </span>
-                <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                  Room {complaint.roomNumber}
-                </span>
+              </div>
+
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="text-sm">
+                  <span className="font-medium text-slate-700 block">
+                    {complaint.residentName}
+                  </span>
+                  <div className="flex items-center gap-1 text-xs text-slate-500">
+                    <Home className="w-3 h-3" />
+                    <span>
+                      {complaint.block}-{complaint.roomNumber}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <p className="text-sm text-slate-600 mb-3 line-clamp-2">
                 {complaint.description}
               </p>
 
-              {complaint.assignedStaffName && (
-                <div className="text-xs text-slate-600 mb-3 flex items-center gap-1">
+              <div className="text-xs text-slate-600 mb-3 flex items-center gap-1">
+                {/* Conditional Icon Rendering */}
+                {complaint.assignedStaffName ? (
                   <UserCheck className="w-3 h-3" />
-                  Currently assigned to: {complaint.assignedStaffName}
-                </div>
-              )}
+                ) : (
+                  <UserRoundX className="w-3 h-3" />
+                )}
+                {/* Text Content */}
+                Currently assigned to: {complaint.assignedStaffName ?? "No one"}
+              </div>
 
               <button
                 onClick={() => handleReassignClick(complaint)}

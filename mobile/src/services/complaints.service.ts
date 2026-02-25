@@ -83,6 +83,7 @@ export interface StatusHistoryEntry {
   newStatus: string;
   changedBy: string | null;
   changedByName: string | null;
+  changedToName: string | null;
   changedAt: string;
 }
 
@@ -112,5 +113,32 @@ export const uploadComplaintAttachments = async (
     formData,
     { headers: { "Content-Type": "multipart/form-data" } },
   );
+  return response.data;
+};
+
+// 8. Complaint Chat Messages
+export interface ComplaintMessage {
+  id: string;
+  message: string;
+  createdAt: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+}
+
+export const getComplaintThread = async (
+  complaintId: string,
+): Promise<ComplaintMessage[]> => {
+  const response = await api.get(`/complaints/${complaintId}/thread`);
+  return response.data;
+};
+
+export const postMessageToThread = async (
+  complaintId: string,
+  message: string,
+): Promise<ComplaintMessage> => {
+  const response = await api.post(`/complaints/${complaintId}/thread`, {
+    message,
+  });
   return response.data;
 };

@@ -1,6 +1,12 @@
 import { db } from "../../db";
-import { messIssues, residentProfiles, rooms, users } from "../../db/schema";
-import { desc, eq, getTableColumns } from "drizzle-orm";
+import {
+  messIssues,
+  residentProfiles,
+  rooms,
+  users,
+  blocks,
+} from "../../db/schema";
+import { desc, eq, getTableColumns, sql, count, gte } from "drizzle-orm";
 
 // export const messIssues = pgTable("mess_issues", {
 //   id: uuid("id").defaultRandom().primaryKey(),
@@ -78,27 +84,51 @@ export const updateMessComplaint = async (
 };
 
 export const getMessIssues = async (status?: string) => {
+  let query = db
+    .select({
+      ...getTableColumns(messIssues),
+      residentName: users.name,
+      roomNumber: rooms.roomNumber,
+      block: blocks.name,
+      phone: users.phone,
+    })
+    .from(messIssues)
+    .leftJoin(users, eq(messIssues.userId, users.id))
+    .leftJoin(residentProfiles, eq(users.id, residentProfiles.userId))
+    .leftJoin(rooms, eq(residentProfiles.roomId, rooms.id))
+    .leftJoin(blocks, eq(rooms.blockId, blocks.id));
+
   if (status && status !== "ALL") {
-    const issues = await db
-      .select({
-        ...getTableColumns(messIssues),
-        residentName: users.name,
-        roonNumber: rooms.roomNumber,
-      })
-      .from(messIssues)
-      .leftJoin(users, eq(messIssues.userId, users.id))
-      .leftJoin(residentProfiles, eq(users.id, residentProfiles.userId))
-      .leftJoin(rooms, eq(residentProfiles.roomId, rooms.id))
-      .where(
-        eq(
-          messIssues.status,
-          status as "OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED",
-        ),
-      )
-      .orderBy(desc(messIssues.createdAt));
-    return issues;
+    query.where(
+      eq(
+        messIssues.status,
+        status as "OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED",
+      ),
+    );
   }
-  return await db.select().from(messIssues);
+
+  const issues = await query.orderBy(desc(messIssues.createdAt));
+
+  const { messIssueAttachments } = await import("../../db/schema");
+
+  const issuesWithAttachments = await Promise.all(
+    issues.map(async (issue) => {
+      const attachments = await db
+        .select({
+          id: messIssueAttachments.id,
+          fileURL: messIssueAttachments.fileURL,
+        })
+        .from(messIssueAttachments)
+        .where(eq(messIssueAttachments.issueId, issue.id));
+
+      return {
+        ...issue,
+        attachments,
+      };
+    }),
+  );
+
+  return issuesWithAttachments;
 };
 
 export const getMyIssues = async (id: string) => {
@@ -128,4 +158,70 @@ export const getMyIssues = async (id: string) => {
   );
 
   return issuesWithAttachments;
+};
+
+// ─── Analytics ───
+export const getMessIssueAnalytics = async () => {
+  // 1. Status counts
+  const statusCounts = await db
+    .select({
+      status: messIssues.status,
+      count: count(),
+    })
+    .from(messIssues)
+    .groupBy(messIssues.status);
+
+  // 2. Category distribution
+  const categoryDist = await db
+    .select({
+      category: messIssues.category,
+      count: count(),
+    })
+    .from(messIssues)
+    .groupBy(messIssues.category);
+
+  // 3. Daily trend data (last 30 days)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const dailyReported = await db
+    .select({
+      date: sql<string>`DATE(${messIssues.createdAt})`.as("date"),
+      count: count(),
+    })
+    .from(messIssues)
+    .where(gte(messIssues.createdAt, thirtyDaysAgo))
+    .groupBy(sql`DATE(${messIssues.createdAt})`)
+    .orderBy(sql`DATE(${messIssues.createdAt})`);
+
+  const dailyResolved = await db
+    .select({
+      date: sql<string>`DATE(${messIssues.resolvedAt})`.as("date"),
+      count: count(),
+    })
+    .from(messIssues)
+    .where(gte(messIssues.resolvedAt, thirtyDaysAgo))
+    .groupBy(sql`DATE(${messIssues.resolvedAt})`)
+    .orderBy(sql`DATE(${messIssues.resolvedAt})`);
+
+  return {
+    statusCounts: statusCounts.map((s) => ({
+      status: s.status,
+      count: Number(s.count),
+    })),
+    categoryDistribution: categoryDist.map((c) => ({
+      category: c.category,
+      count: Number(c.count),
+    })),
+    dailyTrend: {
+      reported: dailyReported.map((d) => ({
+        date: d.date,
+        count: Number(d.count),
+      })),
+      resolved: dailyResolved.map((d) => ({
+        date: d.date,
+        count: Number(d.count),
+      })),
+    },
+  };
 };

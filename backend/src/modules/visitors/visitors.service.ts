@@ -69,6 +69,27 @@ export const getPendingRequests = async () => {
   return requests;
 };
 
+export const getAllRequests = async (
+  status?: "PENDING" | "APPROVED" | "REJECTED" | "CLOSED",
+) => {
+  const requests = await db
+    .select({
+      ...getTableColumns(visitorRequests),
+      residentName: users.name,
+      block: blocks.name,
+      roomNumber: rooms.roomNumber,
+      residentPhone: users.phone,
+    })
+    .from(visitorRequests)
+    .leftJoin(users, eq(visitorRequests.residentId, users.id))
+    .leftJoin(residentProfiles, eq(users.id, residentProfiles.userId))
+    .leftJoin(rooms, eq(residentProfiles.roomId, rooms.id))
+    .leftJoin(blocks, eq(rooms.blockId, blocks.id))
+    .where(status ? eq(visitorRequests.status, status) : undefined)
+    .orderBy(desc(visitorRequests.createdAt));
+  return requests;
+};
+
 export const updateVisitorRequest = async (
   id: string,
   status: "APPROVED" | "REJECTED",
@@ -94,6 +115,7 @@ export const getTodaysVisitors = async () => {
       residentName: users.name,
       block: blocks.name,
       roomNumber: rooms.roomNumber,
+      phone: users.phone,
     })
     .from(visitorRequests)
     .leftJoin(users, eq(visitorRequests.residentId, users.id))
@@ -102,7 +124,7 @@ export const getTodaysVisitors = async () => {
     .leftJoin(blocks, eq(rooms.blockId, blocks.id))
     .where(
       and(
-        eq(visitorRequests.status, "APPROVED"),
+        sql`${visitorRequests.status} IN ('APPROVED', 'CLOSED')`,
         sql`DATE(${visitorRequests.visitDate}) = ${todaysDate}`,
       ),
     );
@@ -110,18 +132,30 @@ export const getTodaysVisitors = async () => {
   return todaysVisitors;
 };
 
-// export const visitorRequests = pgTable("visitor_requests", {
-//   id: uuid("id").defaultRandom().primaryKey(),
-//   residentId: uuid("resident_id")
-//     .references(() => users.id)
-//     .notNull(),
+// Verify Visitor Entry Code (Security Guard)
+export const verifyVisitorCode = async (
+  visitorId: string,
+  entryCode: string,
+) => {
+  const request = await db.query.visitorRequests.findFirst({
+    where: eq(visitorRequests.id, visitorId),
+  });
 
-//   // New Fields for Authenticity
-//   visitorName: varchar("visitor_name", { length: 100 }).notNull(),
-//   visitorPhone: varchar("visitor_phone", { length: 15 }).notNull(),
-//   entryCode: varchar("entry_code", { length: 6 }).notNull(), // 6-digit Security Code
+  if (!request) throw new Error("Visitor request not found");
 
-//   visitDate: timestamp("visit_date").notNull(),
-//   status: approvalStatusEnum("status").default("PENDING"),
-//   createdAt: timestamp("created_at").defaultNow(),
-// });
+  if (request.status !== "APPROVED") {
+    throw new Error("This visitor request is not approved or already verified");
+  }
+
+  if (request.entryCode !== entryCode) {
+    throw new Error("Invalid entry code");
+  }
+
+  // Update status to CLOSED
+  await db
+    .update(visitorRequests)
+    .set({ status: "CLOSED" })
+    .where(eq(visitorRequests.id, visitorId));
+
+  return { message: "Visitor verified successfully ✅", visitor: request };
+};

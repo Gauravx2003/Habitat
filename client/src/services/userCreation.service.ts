@@ -8,6 +8,8 @@ export const createResident = async (
   residentData: {
     name: string;
     email: string;
+    phone: string;
+    dateOfBirth: string;
     roomId: string;
     enrollmentNumber?: string;
   },
@@ -27,6 +29,8 @@ export const createStaff = async (
   staffData: {
     name: string;
     email: string;
+    phone: string;
+    dateOfBirth: string;
     staffType: "IN_HOUSE" | "VENDOR";
     specialization: string;
   },
@@ -43,8 +47,15 @@ export const getHostelBlocks = async (hostelId: string) => {
   return response.data;
 };
 
-export const getBlockRooms = async (blockId: string) => {
-  const response = await api.get(`/user-creation/blockRooms/${blockId}`);
+export const getBlockRooms = async (blockId: string, roomTypeId?: string) => {
+  const response = await api.get(`/user-creation/blockRooms/${blockId}`, {
+    params: roomTypeId ? { roomTypeId } : undefined,
+  });
+  return response.data;
+};
+
+export const getRoomTypesByBlock = async (blockId: string) => {
+  const response = await api.get(`/user-creation/roomTypes/${blockId}`);
   return response.data;
 };
 

@@ -49,6 +49,36 @@ export default function ResidentLayout() {
           ),
         }}
       />
+
+      {/* 3. MENU POSTING (Visible) */}
+      <Tabs.Screen
+        name="mess"
+        options={{
+          title: "Mess Menu",
+          tabBarIcon: ({ color }) => (
+            <Feather name="coffee" size={24} color={color} />
+          ),
+        }}
+      />
+
+      {/* 4. VISITORS (Visible) */}
+      <Tabs.Screen
+        name="visitors"
+        options={{
+          title: "Visitors",
+          tabBarIcon: ({ color }) => (
+            <Feather name="users" size={24} color={color} />
+          ),
+        }}
+      />
+
+      {/* PROFILE (Hidden) */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

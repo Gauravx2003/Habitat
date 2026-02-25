@@ -30,6 +30,7 @@ import campusHubAttachmentsRoutes from "./modules/campusHub/campusHubAttachments
 import smartMessRoutes from "./modules/smartMess/smartMess.routes";
 import userRoutes from "./modules/users/users.routes";
 import orchestratorRoutes from "./modules/orchestrator/orchestrator.routes";
+import infrastructureRoutes from "./modules/infrastructure/infrastructure.routes";
 import { startLibraryCron } from "./jobs/library.job";
 import { startOrchestratorCron } from "./jobs/orchestrator.job";
 
@@ -71,6 +72,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/smart-mess", smartMessRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/orchestrator", orchestratorRoutes);
+app.use("/api/infrastructure", infrastructureRoutes);
 
 const PORT = process.env.PORT || 5000;
 

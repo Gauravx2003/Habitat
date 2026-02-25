@@ -10,6 +10,8 @@ import {
   residentRejectResolutionController,
   residentCloseComplaintController,
   getComplaintHistoryController,
+  getThreadController,
+  postMessageController,
 } from "./complaints.controller";
 
 const router = Router();
@@ -63,5 +65,9 @@ router.patch(
 );
 
 router.get("/:id/history", authenticate, getComplaintHistoryController);
+
+// Add these to your existing complaint routes
+router.get("/:complaintId/thread", authenticate, getThreadController);
+router.post("/:complaintId/thread", authenticate, postMessageController);
 
 export default router;

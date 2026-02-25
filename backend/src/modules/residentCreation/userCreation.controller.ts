@@ -4,13 +4,14 @@ import { createResident, createStaff } from "./userCreation.service";
 import {
   blocks,
   hostels,
-  room_types,
+  roomTypes,
   rooms,
   users,
   residentProfiles,
 } from "../../db/schema";
 import { eq, lt, and } from "drizzle-orm";
 import { db } from "../../db";
+import { sendWelcomeEmail } from "../../services/email.service";
 
 export const createResidentController = async (
   req: Authenticate,
@@ -19,6 +20,12 @@ export const createResidentController = async (
   try {
     const { adminUser, residentData } = req.body;
     const resident = await createResident(adminUser, residentData);
+    sendWelcomeEmail(
+      residentData.email,
+      residentData.name,
+      resident.tempPassword,
+      "RESIDENT",
+    );
     res.status(201).json(resident);
   } catch (error: any) {
     console.error("Error creating resident:", error);
@@ -52,21 +59,53 @@ export const getBlockRoomsController = async (
 ) => {
   try {
     const { blockId } = req.params;
+    const { roomTypeId } = req.query;
+
+    let conditions = [
+      eq(rooms.blockId, blockId),
+      lt(rooms.currentOccupancy, roomTypes.capacity),
+    ];
+
+    if (roomTypeId) {
+      conditions.push(eq(rooms.type, roomTypeId as string));
+    }
+
     const room = await db
       .select()
       .from(rooms)
-      .leftJoin(room_types, eq(rooms.type, room_types.id))
-      .where(
-        and(
-          eq(rooms.blockId, blockId),
-          lt(rooms.currentOccupancy, room_types.capacity),
-        ),
-      );
+      .leftJoin(roomTypes, eq(rooms.type, roomTypes.id))
+      .where(and(...conditions));
 
     res.status(200).json(room);
   } catch (error) {
     console.error("Error getting block rooms:", error);
     res.status(500).json({ error: "Failed to get block rooms" });
+  }
+};
+
+export const getRoomTypesByBlockController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { blockId } = req.params;
+
+    // Get distinct room types that exist in rooms of this block
+    const types = await db
+      .selectDistinct({
+        id: roomTypes.id,
+        name: roomTypes.name,
+        capacity: roomTypes.capacity,
+        price: roomTypes.price,
+      })
+      .from(rooms)
+      .innerJoin(roomTypes, eq(rooms.type, roomTypes.id))
+      .where(eq(rooms.blockId, blockId));
+
+    res.status(200).json(types);
+  } catch (error) {
+    console.error("Error getting room types:", error);
+    res.status(500).json({ error: "Failed to get room types" });
   }
 };
 
@@ -85,6 +124,12 @@ export const createStaffController = async (
     }
 
     const staff = await createStaff(adminUser, staffData);
+    sendWelcomeEmail(
+      staffData.email,
+      staffData.name,
+      staff.tempPassword,
+      "STAFF",
+    );
     res.status(201).json(staff);
   } catch (error: any) {
     console.error("Error creating staff:", error);

@@ -6,7 +6,7 @@ import { db } from "../../db";
 import {
   users,
   residentProfiles,
-  room_types,
+  roomTypes,
   rooms,
   blocks,
   organizations,
@@ -94,22 +94,22 @@ export const getMyProfileController = async (
       .select({
         name: users.name,
         email: users.email,
-        phone: residentProfiles.phone,
-        dateOfBirth: residentProfiles.dateOfBirth,
+        phone: users.phone,
+        dateOfBirth: users.dateOfBirth,
         department: residentProfiles.department,
         departmentId: residentProfiles.departmentId,
         role: users.role,
         hostel: hostels.name,
         block: blocks.name,
         roomNumber: rooms.roomNumber,
-        roomType: room_types.name,
+        roomType: roomTypes.name,
         organization: organizations.name,
         createdAt: users.createdAt,
       })
       .from(users)
       .leftJoin(residentProfiles, eq(users.id, residentProfiles.userId))
       .leftJoin(rooms, eq(residentProfiles.roomId, rooms.id))
-      .leftJoin(room_types, eq(rooms.type, room_types.id))
+      .leftJoin(roomTypes, eq(rooms.type, roomTypes.id))
       .leftJoin(blocks, eq(rooms.blockId, blocks.id))
       .leftJoin(hostels, eq(blocks.hostelId, hostels.id))
       .leftJoin(organizations, eq(hostels.organizationId, organizations.id))

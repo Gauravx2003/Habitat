@@ -9,9 +9,11 @@ import {
   adminCloseComplaint,
   residentRejectResolution,
   residentCloseComplaint,
+  addMessageToThread,
+  getComplaintThread,
 } from "./complaints.service";
 import { complaintStatusHistory, users } from "../../db/schema";
-import { eq, getTableColumns } from "drizzle-orm";
+import { aliasedTable, eq, getTableColumns } from "drizzle-orm";
 import { db } from "../../db";
 
 export const raiseComplaint = async (req: Authenticate, res: Response) => {
@@ -142,7 +144,7 @@ export const adminCloseComplaintController = async (
 ) => {
   try {
     const { id } = req.params;
-    const complaint = await adminCloseComplaint(id);
+    const complaint = await adminCloseComplaint(id, req.user!.userId);
     return res
       .status(200)
       .json({ message: "Complaint forcefully closed by Admin", complaint });
@@ -160,18 +162,53 @@ export const getComplaintHistoryController = async (
   try {
     const { id } = req.params;
 
+    const actors = aliasedTable(users, "actors");
+    const targets = aliasedTable(users, "targets");
+
     const complaintHistory = await db
       .select({
         ...getTableColumns(complaintStatusHistory),
-        changedByName: users.name,
+        changedByName: actors.name,
+        changedToName: targets.name,
       })
       .from(complaintStatusHistory)
-      .leftJoin(users, eq(complaintStatusHistory.changedBy, users.id))
+      .leftJoin(actors, eq(complaintStatusHistory.changedBy, actors.id))
+      .leftJoin(targets, eq(complaintStatusHistory.changedTo, targets.id))
       .where(eq(complaintStatusHistory.complaintId, id));
 
     return res.status(200).json(complaintHistory);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const getThreadController = async (req: Authenticate, res: Response) => {
+  try {
+    const { complaintId } = req.params;
+    const messages = await getComplaintThread(complaintId);
+    res.json(messages);
+  } catch (error: any) {
+    res.status(500).json({ message: "Failed to load messages" });
+  }
+};
+
+export const postMessageController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { complaintId } = req.params;
+    const { message } = req.body;
+    const senderId = req.user!.userId;
+
+    if (!message || message.trim() === "") {
+      return res.status(400).json({ message: "Message cannot be empty" });
+    }
+
+    const newMessage = await addMessageToThread(complaintId, senderId, message);
+    res.status(201).json(newMessage);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
   }
 };

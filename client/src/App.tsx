@@ -22,6 +22,9 @@ import FinesAndPayments from "./pages/resident/FinesAndPayments";
 import FineManage from "./pages/admin/FineManage";
 import VisitorRequest from "./pages/resident/VisitorRequest";
 import CampusHub from "./pages/admin/CampusHub";
+import VisitorsApproval from "./pages/admin/visitorsApproval";
+import MessIssueManagement from "./pages/admin/messIssue";
+import Infrastructure from "./pages/admin/Infrastructure";
 
 const App = () => {
   return (
@@ -46,6 +49,9 @@ const App = () => {
           <Route path="lost-found" element={<LostFoundApprovals />} />
           <Route path="late-entry-exit" element={<LateEntryExitApproval />} />
           <Route path="fines-payments" element={<FineManage />} />
+          <Route path="visitor-requests" element={<VisitorsApproval />} />
+          <Route path="mess-issues" element={<MessIssueManagement />} />
+          <Route path="infrastructure" element={<Infrastructure />} />
         </Route>
 
         {/* STAFF */}

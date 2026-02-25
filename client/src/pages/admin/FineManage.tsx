@@ -25,8 +25,6 @@ interface Payment {
   residentRoom: string;
 }
 
-
-
 const FineManage = () => {
   const [filter, setFilter] = useState<
     "ALL" | "PENDING" | "COMPLETED" | "WAIVED"
@@ -222,7 +220,7 @@ const FineManage = () => {
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 flex-shrink-0">
                       <Tag className="w-3.5 h-3.5" />
                       <span className="text-xs font-medium">
-                        {payment.category}
+                        {payment.category.replace("_", " ")}
                       </span>
                     </div>
 

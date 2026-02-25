@@ -4,10 +4,18 @@ import {
   updateMessComplaintController,
   getAllMessIssuesController,
   getMyMessIssuesController,
+  getMessIssueAnalyticsController,
 } from "./messIssue.controller";
 import { authenticate, authorize } from "../../middleware/auth";
 
 const router = Router();
+
+router.get(
+  "/analytics",
+  authenticate,
+  authorize(["ADMIN"]),
+  getMessIssueAnalyticsController,
+);
 
 router.post(
   "/create",

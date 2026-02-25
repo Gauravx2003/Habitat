@@ -2,11 +2,12 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   Alert,
   Switch,
+  TouchableOpacity,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useSelector, useDispatch } from "react-redux";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -25,6 +26,8 @@ import {
   ProfileMenuModal,
   MenuOption,
 } from "../../components/ProfileMenuModal";
+import { UniversalScanner } from "../../components/UniversalScanner";
+import { useCameraPermissions } from "expo-camera";
 
 const AnimatedNumber = ({ target, style }: { target: number; style: any }) => {
   const [count, setCount] = useState(0);
@@ -110,6 +113,20 @@ export default function StaffDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
+
+  // Scanner State
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = useState(false);
+
+  const startScan = () => {
+    if (!permission?.granted) {
+      requestPermission();
+    } else {
+      setIsScanning(true);
+    }
+  };
+
+  const closeScanner = () => setIsScanning(false);
 
   const fetchData = async () => {
     try {
@@ -222,9 +239,13 @@ export default function StaffDashboard() {
     (item) => item.status === "IN_PROGRESS",
   ).length;
 
+  if (isScanning) {
+    return <UniversalScanner isFocused={true} onClose={closeScanner} />;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView className="px-5 pt-5 pb-20">
         {/* Header */}
         <View style={{ marginBottom: 24 }}>
           <DashboardHeader
@@ -322,6 +343,29 @@ export default function StaffDashboard() {
         menuOptions={menuOptions}
         onLogout={handleLogout}
       />
+
+      {/* Floating Scan Button */}
+      <TouchableOpacity
+        onPress={startScan}
+        style={{
+          position: "absolute",
+          bottom: 30,
+          right: 20,
+          backgroundColor: "#4F46E5",
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          justifyContent: "center",
+          alignItems: "center",
+          shadowColor: "#4F46E5",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 5,
+        }}
+      >
+        <Feather name="maximize" size={24} color="white" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

@@ -19,6 +19,8 @@ import {
   StatusHistoryEntry,
   getComplaintHistory,
 } from "@/src/services/complaints.service";
+import { ComplaintFilter } from "./ComplaintFilter";
+import { ComplaintChatModal } from "./ComplaintChatModal";
 
 const { width, height: screenHeight } = Dimensions.get("window");
 
@@ -71,12 +73,18 @@ export function ComplaintHistoryList({
   onReject,
 }: Props) {
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("ALL");
 
   // Status history modal
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [historyData, setHistoryData] = useState<StatusHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyComplaintTitle, setHistoryComplaintTitle] = useState("");
+
+  // Chat modal state
+  const [chatModalVisible, setChatModalVisible] = useState(false);
+  const [chatComplaintId, setChatComplaintId] = useState("");
+  const [chatComplaintTitle, setChatComplaintTitle] = useState("");
 
   const openHistory = async (complaint: Complaint) => {
     setHistoryComplaintTitle(complaint.title);
@@ -105,7 +113,7 @@ export function ComplaintHistoryList({
   };
 
   const formatStatus = (s: string) =>
-    s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "";
 
   const renderTimeline = () => {
     if (historyLoading) {
@@ -128,20 +136,33 @@ export function ComplaintHistoryList({
       );
     }
 
-    // Build nodes: "CREATED" initial + each transition's newStatus
+    // 1. Sort historyData by changedAt (Ascending)
+    const sortedHistory = [...historyData].sort((a, b) => {
+      return new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime();
+    });
+
+    // 2. Build nodes: "CREATED" initial + each transition's newStatus
+    const initialNode = sortedHistory[0]?.oldStatus
+      ? [
+          {
+            status: sortedHistory[0].oldStatus,
+            changedAt: null as string | null,
+            changedBy: null as string | null,
+            changedByName: null as string | null,
+            changedToName: null as string | null,
+            isInitial: true,
+          },
+        ]
+      : [];
+
     const nodes = [
-      {
-        status: historyData[0].oldStatus,
-        changedAt: null as string | null,
-        changedBy: null as string | null,
-        changedByName: null as string | null,
-        isInitial: true,
-      },
-      ...historyData.map((entry) => ({
+      ...initialNode,
+      ...sortedHistory.map((entry) => ({
         status: entry.newStatus,
         changedAt: entry.changedAt,
         changedBy: entry.changedBy,
         changedByName: entry.changedByName,
+        changedToName: entry.changedToName,
         isInitial: false,
       })),
     ];
@@ -159,9 +180,16 @@ export function ComplaintHistoryList({
           };
           const iconName = STATUS_ICONS[node.status] ?? "circle";
 
+          // Logic for "To: changedToName" vs "By: changedByName"
+          const isAssignmentStatus =
+            node.status === "ASSIGNED" || node.status === "ESCALATED";
+          const displayName = isAssignmentStatus
+            ? node.changedToName
+            : node.changedByName;
+          const displayPrefix = isAssignmentStatus ? "To: " : "By: ";
+
           return (
             <View key={idx} style={styles.timelineRow}>
-              {/* Connector column */}
               <View style={styles.timelineConnector}>
                 <View
                   style={[styles.timelineDot, { backgroundColor: colors.text }]}
@@ -171,7 +199,6 @@ export function ComplaintHistoryList({
                 {!isLast && <View style={styles.timelineLine} />}
               </View>
 
-              {/* Content column */}
               <View style={styles.timelineContent}>
                 <View
                   style={[
@@ -194,14 +221,18 @@ export function ComplaintHistoryList({
                     </Text>
                   </View>
                 )}
-                {node.changedByName && (
+
+                {/* Enhanced logic for dynamic Name display */}
+                {displayName && (
                   <View style={styles.timelineMeta}>
                     <Feather name="user" size={12} color="#94A3B8" />
                     <Text style={styles.timelineMetaText}>
-                      By: {node.changedByName}
+                      {displayPrefix}
+                      {displayName}
                     </Text>
                   </View>
                 )}
+
                 {node.isInitial && (
                   <Text style={styles.timelineMetaText}>Initial status</Text>
                 )}
@@ -213,10 +244,28 @@ export function ComplaintHistoryList({
     );
   };
 
+  const filteredData =
+    filter === "ALL"
+      ? complaints
+      : complaints.filter((c) => c.status === filter);
+
   return (
     <>
+      <ComplaintFilter
+        filter={filter}
+        setFilter={setFilter}
+        options={[
+          "ALL",
+          "CREATED",
+          "ASSIGNED",
+          "IN_PROGRESS",
+          "RESOLVED",
+          "CLOSED",
+          "REJECTED",
+        ]}
+      />
       <FlatList
-        data={complaints}
+        data={filteredData}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 20 }}
         refreshControl={
@@ -248,7 +297,7 @@ export function ComplaintHistoryList({
             </Text>
             <Text
               className="font-sn-pro-regular"
-              numberOfLines={2}
+              //numberOfLines={2}
               style={styles.cardDesc}
             >
               {item.description}
@@ -282,14 +331,29 @@ export function ComplaintHistoryList({
               </Text>
             )}
 
-            {/* View History Button */}
-            <TouchableOpacity
-              style={styles.viewHistoryBtn}
-              onPress={() => openHistory(item)}
-            >
-              <Feather name="git-commit" size={14} color="#4F46E5" />
-              <Text style={styles.viewHistoryText}>View Timeline</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              {/* View History Button */}
+              <TouchableOpacity
+                style={styles.actionLinkBtn}
+                onPress={() => openHistory(item)}
+              >
+                <Feather name="git-commit" size={14} color="#4F46E5" />
+                <Text style={styles.actionLinkText}>View Timeline</Text>
+              </TouchableOpacity>
+
+              {/* Chat Button */}
+              <TouchableOpacity
+                style={styles.actionLinkBtn}
+                onPress={() => {
+                  setChatComplaintId(item.id);
+                  setChatComplaintTitle(item.title);
+                  setChatModalVisible(true);
+                }}
+              >
+                <Feather name="message-circle" size={14} color="#4F46E5" />
+                <Text style={styles.actionLinkText}>Chat</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Action buttons only for RESOLVED complaints */}
             {item.status === "RESOLVED" && (
@@ -369,6 +433,14 @@ export function ComplaintHistoryList({
           </View>
         </View>
       </Modal>
+
+      {/* Chat Modal */}
+      <ComplaintChatModal
+        visible={chatModalVisible}
+        complaintId={chatComplaintId}
+        complaintTitle={chatComplaintTitle}
+        onClose={() => setChatModalVisible(false)}
+      />
     </>
   );
 }
@@ -414,16 +486,19 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // View History
-  viewHistoryBtn: {
+  buttonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 10,
+  },
+  actionLinkBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 10,
-    alignSelf: "flex-start",
     paddingVertical: 4,
   },
-  viewHistoryText: {
+  actionLinkText: {
     fontSize: 13,
     color: "#4F46E5",
     fontWeight: "600",

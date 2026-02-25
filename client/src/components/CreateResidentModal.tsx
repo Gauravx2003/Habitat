@@ -6,6 +6,7 @@ import {
   createResident,
   getHostelBlocks,
   getBlockRooms,
+  getRoomTypesByBlock,
 } from "../services/userCreation.service";
 
 interface CreateResidentModalProps {
@@ -30,6 +31,13 @@ interface Room {
   };
 }
 
+interface RoomType {
+  id: string;
+  name: string;
+  capacity: number | null;
+  price: number;
+}
+
 const CreateResidentModal = ({
   onClose,
   onSuccess,
@@ -39,16 +47,21 @@ const CreateResidentModal = ({
   // Form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [enrollmentNumber, setEnrollmentNumber] = useState("");
   const [selectedBlockId, setSelectedBlockId] = useState("");
+  const [selectedRoomTypeId, setSelectedRoomTypeId] = useState("");
   const [selectedRoomId, setSelectedRoomId] = useState("");
 
   // Data state
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
 
   // Loading states
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(true);
+  const [isLoadingRoomTypes, setIsLoadingRoomTypes] = useState(false);
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -59,15 +72,27 @@ const CreateResidentModal = ({
     }
   }, [user?.hostelId]);
 
-  // Fetch rooms when block is selected
+  // Fetch room types when block is selected
   useEffect(() => {
     if (selectedBlockId) {
-      fetchRooms(selectedBlockId);
+      fetchRoomTypes(selectedBlockId);
     } else {
+      setRoomTypes([]);
+      setSelectedRoomTypeId("");
       setRooms([]);
       setSelectedRoomId("");
     }
   }, [selectedBlockId]);
+
+  // Fetch rooms when room type is selected
+  useEffect(() => {
+    if (selectedBlockId && selectedRoomTypeId) {
+      fetchRooms(selectedBlockId, selectedRoomTypeId);
+    } else {
+      setRooms([]);
+      setSelectedRoomId("");
+    }
+  }, [selectedRoomTypeId]);
 
   const fetchBlocks = async () => {
     if (!user?.hostelId) return;
@@ -84,15 +109,25 @@ const CreateResidentModal = ({
     }
   };
 
-  const fetchRooms = async (blockId: string) => {
+  const fetchRoomTypes = async (blockId: string) => {
+    setIsLoadingRoomTypes(true);
+    try {
+      const data = await getRoomTypesByBlock(blockId);
+      setRoomTypes(data);
+    } catch (error) {
+      console.error("Failed to fetch room types:", error);
+    } finally {
+      setIsLoadingRoomTypes(false);
+    }
+  };
+
+  const fetchRooms = async (blockId: string, roomTypeId: string) => {
     setIsLoadingRooms(true);
     try {
-      const data = await getBlockRooms(blockId);
-      console.log("data", data);
+      const data = await getBlockRooms(blockId, roomTypeId);
       setRooms(data);
     } catch (error) {
       console.error("Failed to fetch rooms:", error);
-      alert("Failed to load rooms. Please try again.");
     } finally {
       setIsLoadingRooms(false);
     }
@@ -116,6 +151,8 @@ const CreateResidentModal = ({
         {
           name,
           email,
+          phone,
+          dateOfBirth,
           roomId: selectedRoomId,
           enrollmentNumber: enrollmentNumber || undefined,
         },
@@ -137,7 +174,7 @@ const CreateResidentModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div className="flex items-center gap-2">
@@ -155,111 +192,172 @@ const CreateResidentModal = ({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Full Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-              placeholder="Enter resident's full name"
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+            {/* Row 1: Name + Email */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="Resident's full name"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="resident@example.com"
+                />
+              </div>
+            </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Email Address <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-              placeholder="resident@example.com"
-            />
-          </div>
+            {/* Row 2: Phone + DOB */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Phone Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Date of Birth <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                />
+              </div>
+            </div>
 
-          {/* Enrollment Number */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Enrollment Number{" "}
-              <span className="text-slate-400 text-xs">(Optional)</span>
-            </label>
-            <input
-              type="text"
-              value={enrollmentNumber}
-              onChange={(e) => setEnrollmentNumber(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-              placeholder="e.g., EN12345"
-            />
-          </div>
+            {/* Enrollment Number */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Enrollment Number{" "}
+                <span className="text-slate-400 text-xs">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={enrollmentNumber}
+                onChange={(e) => setEnrollmentNumber(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                placeholder="e.g., EN12345"
+              />
+            </div>
 
-          {/* Block Dropdown */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              <Building className="w-4 h-4 inline mr-1" />
-              Block <span className="text-red-500">*</span>
-            </label>
-            <select
-              required
-              value={selectedBlockId}
-              onChange={(e) => setSelectedBlockId(e.target.value)}
-              disabled={isLoadingBlocks}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">
-                {isLoadingBlocks ? "Loading blocks..." : "Select a block"}
-              </option>
-              {blocks.map((block) => (
-                <option key={block.id} value={block.id}>
-                  {block.name}
+            {/* Row 3: Block + Room Type */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <Building className="w-4 h-4 inline mr-1" />
+                  Block <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={selectedBlockId}
+                  onChange={(e) => setSelectedBlockId(e.target.value)}
+                  disabled={isLoadingBlocks}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <option value="">
+                    {isLoadingBlocks ? "Loading blocks..." : "Select a block"}
+                  </option>
+                  {blocks.map((block) => (
+                    <option key={block.id} value={block.id}>
+                      {block.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <Home className="w-4 h-4 inline mr-1" />
+                  Room Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={selectedRoomTypeId}
+                  onChange={(e) => setSelectedRoomTypeId(e.target.value)}
+                  disabled={!selectedBlockId || isLoadingRoomTypes}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <option value="">
+                    {!selectedBlockId
+                      ? "Select a block first"
+                      : isLoadingRoomTypes
+                        ? "Loading..."
+                        : roomTypes.length === 0
+                          ? "No types available"
+                          : "Select a room type"}
+                  </option>
+                  {roomTypes.map((rt) => (
+                    <option key={rt.id} value={rt.id}>
+                      {rt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Room Dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                <Home className="w-4 h-4 inline mr-1" />
+                Room <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                value={selectedRoomId}
+                onChange={(e) => setSelectedRoomId(e.target.value)}
+                disabled={!selectedRoomTypeId || isLoadingRooms}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">
+                  {!selectedRoomTypeId
+                    ? "Select a room type first"
+                    : isLoadingRooms
+                      ? "Loading rooms..."
+                      : rooms.length === 0
+                        ? "No available rooms"
+                        : "Select a room"}
                 </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Room Dropdown */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              <Home className="w-4 h-4 inline mr-1" />
-              Room <span className="text-red-500">*</span>
-            </label>
-            <select
-              required
-              value={selectedRoomId}
-              onChange={(e) => setSelectedRoomId(e.target.value)}
-              disabled={!selectedBlockId || isLoadingRooms}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">
-                {!selectedBlockId
-                  ? "Select a block first"
-                  : isLoadingRooms
-                    ? "Loading rooms..."
-                    : rooms.length === 0
-                      ? "No available rooms"
-                      : "Select a room"}
-              </option>
-              {rooms.map((room) => (
-                <option key={room?.rooms.id} value={room.rooms.id}>
-                  {room.rooms.roomNumber} (Available:{" "}
-                  {room.room_types.capacity -
-                    (room.rooms.currentOccupancy || 0)}
-                  /{room.room_types.capacity})
-                </option>
-              ))}
-            </select>
+                {rooms.map((room) => (
+                  <option key={room?.rooms.id} value={room.rooms.id}>
+                    {room.rooms.roomNumber} (Available:{" "}
+                    {room.room_types.capacity -
+                      (room.rooms.currentOccupancy || 0)}
+                    /{room.room_types.capacity})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Footer Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 p-6 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}

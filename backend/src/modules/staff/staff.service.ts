@@ -5,6 +5,9 @@ import {
   complaintCategories,
   staffProfiles,
   complaintStatusHistory,
+  blocks,
+  residentProfiles,
+  rooms,
 } from "../../db/schema";
 import { autoAssignPendingComplaint } from "../complaints/complaints.service";
 import { createNotification } from "../notifications/notifications.service";
@@ -26,18 +29,27 @@ export const getAssignedComplaints = async (
   return await db
     .select({
       id: complaints.id,
+      title: complaints.title,
       description: complaints.description,
       status: complaints.status,
       priority: complaints.priority,
       createdAt: complaints.createdAt,
       residentId: complaints.residentId,
       category: complaintCategories.name,
+      name: users.name,
+      phone: users.phone,
+      room: rooms.roomNumber,
+      block: blocks.name,
     })
     .from(complaints)
     .innerJoin(
       complaintCategories,
       eq(complaintCategories.id, complaints.categoryId),
     )
+    .innerJoin(users, eq(users.id, complaints.residentId))
+    .innerJoin(residentProfiles, eq(residentProfiles.userId, users.id))
+    .innerJoin(rooms, eq(rooms.id, residentProfiles.roomId))
+    .innerJoin(blocks, eq(blocks.id, rooms.blockId))
     .where(and(...conditions)); // Spreads all active conditions into the AND block
 };
 
@@ -98,14 +110,6 @@ export const updateComplaintStatus = async (
         "Your complaint has been marked as resolved. Please review and close it.",
       );
 
-      await tx.insert(complaintStatusHistory).values({
-        complaintId,
-        newStatus: status,
-        oldStatus: complaint.status,
-        changedAt: new Date(),
-        changedBy: staffId,
-      });
-
       // Decrement the staff's current tasks counter (use GREATEST to prevent negative numbers just in case)
       await tx
         .update(staffProfiles)
@@ -118,6 +122,14 @@ export const updateComplaintStatus = async (
       // This immediately checks if there is a 'CREATED' complaint waiting for this staff member
       await autoAssignPendingComplaint(tx, staffId);
     }
+
+    await tx.insert(complaintStatusHistory).values({
+      complaintId,
+      newStatus: status,
+      oldStatus: complaint.status,
+      changedAt: new Date(),
+      changedBy: staffId,
+    });
 
     return updated;
   });

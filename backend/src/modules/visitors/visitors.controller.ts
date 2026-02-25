@@ -4,8 +4,10 @@ import {
   createRequest,
   getMyVisitorRequests,
   getPendingRequests,
+  getAllRequests,
   updateVisitorRequest,
   getTodaysVisitors,
+  verifyVisitorCode,
 } from "./visitors.service";
 
 export const createRequestController = async (
@@ -62,13 +64,27 @@ export const getPendingRequestsController = async (
   }
 };
 
+export const getAllRequestsController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { status } = req.query;
+    const requests = await getAllRequests(status as any);
+    return res.status(200).json(requests);
+  } catch (error) {
+    console.error("DB select failed:", error);
+    return res.status(500).json({ error: "Failed to get all requests" });
+  }
+};
+
 export const updateRequestController = async (
   req: Authenticate,
   res: Response,
 ) => {
   try {
     const { id } = req.params;
-    const { status } = req.query;
+    const { status } = req.body;
 
     if (status != "APPROVED" && status != "REJECTED") {
       return res.status(400).json({ error: "Invalid status" });
@@ -94,5 +110,28 @@ export const getTodaysVisitorsController = async (
   } catch (error) {
     console.error("DB select failed:", error);
     return res.status(500).json({ error: "Failed to get requests" });
+  }
+};
+
+// Verify Visitor Entry Code (Security)
+export const verifyVisitorController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const { visitorId, entryCode } = req.body;
+
+    if (!visitorId || !entryCode) {
+      return res
+        .status(400)
+        .json({ message: "Visitor ID and Entry Code are required" });
+    }
+
+    const result = await verifyVisitorCode(visitorId, entryCode);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    return res
+      .status(400)
+      .json({ message: error.message || "Verification failed" });
   }
 };

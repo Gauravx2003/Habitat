@@ -26,18 +26,18 @@ messRouter.post(
   optOutController,
 );
 
-// Admin / Staff Routes
+// Admin / Staff / Security Routes
 messRouter.post(
   "/create",
   authenticate,
-  authorize(["ADMIN", "STAFF"]), // Allows Wardens to set menu
+  authorize(["ADMIN", "STAFF", "SECURITY"]), // Allows Guards & Wardens to set menu
   createMenuController,
 );
 
 messRouter.post(
   "/scan",
   authenticate,
-  authorize(["STAFF", "ADMIN"]),
+  authorize(["STAFF", "ADMIN", "SECURITY"]),
   scanMessController,
 );
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../services/api";
+import { useToast } from "../../components/common/Toast";
 import {
   Package,
   Search,
@@ -29,6 +30,7 @@ interface LostFoundItem {
 }
 
 const LostFoundApprovals = () => {
+  const { showToast } = useToast();
   const [items, setItems] = useState<LostFoundItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"ALL" | "LOST" | "FOUND">("ALL");
@@ -49,18 +51,22 @@ const LostFoundApprovals = () => {
   const handleCloseItem = async (id: string) => {
     try {
       await api.patch(`/lost-and-found/${id}/close`);
+      showToast("Claim approved successfully!", "success");
       fetchItems();
     } catch (error) {
       console.error("Failed to close item:", error);
+      showToast("Failed to approve claim", "error");
     }
   };
 
   const handleReopenItem = async (id: string) => {
     try {
       await api.patch(`/lost-and-found/${id}/open`);
+      showToast("Claim rejected, item reopened", "warning");
       fetchItems();
     } catch (error) {
       console.error("Failed to reopen item:", error);
+      showToast("Failed to reject claim", "error");
     }
   };
 
@@ -75,9 +81,11 @@ const LostFoundApprovals = () => {
         foundDate,
         foundLocation,
       });
+      showToast("Item marked as found!", "success");
       fetchItems();
     } catch (error) {
       console.error("Failed to mark as found:", error);
+      showToast("Failed to mark item as found", "error");
     }
   };
 
@@ -178,12 +186,12 @@ const LostFoundApprovals = () => {
               className="bg-white rounded-lg border border-slate-200 p-5 hover:shadow-md transition-shadow"
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-3">
+              <div className="flex items-start justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <Package className="w-5 h-5 text-indigo-600" />
                   <h3 className="font-semibold text-slate-800">{item.title}</h3>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
                   <span
                     className={`px-2 py-1 rounded text-xs font-medium ${getTypeBadge(
                       item.type,
@@ -200,6 +208,9 @@ const LostFoundApprovals = () => {
                   </span>
                 </div>
               </div>
+              <p className="text-[11px] font-mono text-slate-400 mb-1 ml-7">
+                #{item.id.slice(0, 8)}
+              </p>
 
               {/* Description */}
               <p className="text-sm text-slate-600 mb-4 line-clamp-2">

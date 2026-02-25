@@ -7,7 +7,7 @@ import {
   rooms,
   blocks,
   staffProfiles,
-  room_types,
+  roomTypes,
   payments,
 } from "../../db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -46,12 +46,12 @@ export const createResident = async (
   const [roomValidation] = await db
     .select({
       hostelId: blocks.hostelId,
-      price: room_types.price,
-      type: room_types.name,
+      price: roomTypes.price,
+      type: roomTypes.name,
     })
     .from(rooms)
     .innerJoin(blocks, eq(rooms.blockId, blocks.id))
-    .innerJoin(room_types, eq(rooms.type, room_types.id))
+    .innerJoin(roomTypes, eq(rooms.type, roomTypes.id))
     .where(eq(rooms.id, residentData.roomId));
 
   if (!roomValidation || roomValidation.hostelId !== adminUser.hostelId) {
@@ -74,6 +74,8 @@ export const createResident = async (
         isActive: true,
         hostelId: adminUser.hostelId,
         organizationId: adminUser.organizationId,
+        phone: residentData.phone,
+        dateOfBirth: residentData.dateOfBirth,
       })
       .returning();
 
@@ -84,8 +86,6 @@ export const createResident = async (
         userId: newUser.id,
         roomId: residentData.roomId,
         enrollmentNumber: residentData.enrollmentNumber || null,
-        phone: residentData.phone,
-        dateOfBirth: residentData.dateOfBirth,
       })
       .returning();
 
@@ -150,6 +150,8 @@ export const createStaff = async (
         hostelId: adminUser.hostelId,
         name: staffData.name,
         email: staffData.email,
+        phone: staffData.phone,
+        dateOfBirth: staffData.dateOfBirth,
         role: "STAFF",
         isActive: true,
         passwordHash,
@@ -162,8 +164,6 @@ export const createStaff = async (
         userId: newUser.id,
         staffType: staffData.staffType,
         specialization: staffData.specialization,
-        phone: staffData.phone,
-        dateOfBirth: staffData.dateOfBirth,
       })
       .returning();
 

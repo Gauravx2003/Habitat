@@ -35,7 +35,8 @@ export const createMenuController = async (
   res: Response,
 ) => {
   try {
-    const { date, mealType, items, customCutoffHours } = req.body;
+    const { date, mealType, items, customCutoffHours, customServeTime } =
+      req.body;
 
     if (!req.user?.hostelId)
       return res.status(400).json({ message: "Hostel ID missing" });
@@ -47,7 +48,8 @@ export const createMenuController = async (
 
     // B. Calculate Serving Time (Date + Rule Time)
     // Input date is "YYYY-MM-DD", rule.serveTime is "HH:MM"
-    const servingTime = new Date(`${date}T${rule.serveTime}:00`);
+    const serveTime = customServeTime || rule.serveTime;
+    const servingTime = new Date(`${date}T${serveTime}:00`);
 
     // C. Calculate Cutoff Time (Serving Time - Cutoff Hours)
     const hoursToSubtract = customCutoffHours || rule.cutoffHours;

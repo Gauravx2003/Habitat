@@ -41,6 +41,7 @@ export const runEscalationJob = async () => {
       newStatus: "ESCALATED",
       oldStatus: complaint.status,
       changedAt: new Date(),
+      changedTo: admin?.id,
     });
 
     await db.insert(escalations).values({

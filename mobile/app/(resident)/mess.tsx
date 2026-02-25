@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
 import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect } from "expo-router";
 
 import {
   messService,
@@ -101,11 +102,12 @@ export default function MessScreen() {
     try {
       setLoadingMenu(true);
       const data = await messService.getDailyMenu();
-      // Sort chronologically so Breakfast → Lunch → Snacks → Dinner
+
       const sorted = [...data].sort(
         (a, b) =>
           new Date(a.servingTime).getTime() - new Date(b.servingTime).getTime(),
       );
+
       setMenu(sorted);
     } catch (error) {
       console.error("Failed to fetch menu", error);
@@ -116,9 +118,18 @@ export default function MessScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMenu();
-  }, [fetchMenu]);
+  // Replace useEffect with this:
+  useFocusEffect(
+    useCallback(() => {
+      fetchMenu();
+
+      // Optional: Return a cleanup function if you need to
+      // cancel subscriptions or reset state when the screen loses focus
+      return () => {
+        // console.log('Screen unfocused');
+      };
+    }, [fetchMenu]),
+  );
 
   useEffect(() => {
     if (activeTab === "issues") {

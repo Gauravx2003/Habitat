@@ -10,12 +10,13 @@ import {
   Alert,
   Image,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   Modal,
   Pressable,
   Dimensions,
 } from "react-native";
+
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 import { Feather } from "@expo/vector-icons";
@@ -175,6 +176,7 @@ export default function LostAndFoundScreen() {
           <Feather name="package" size={20} color="#4F46E5" />
         </View>
         <View style={{ flex: 1 }}>
+          <Text style={styles.cardId}>#{item.id.slice(0, 8)}</Text>
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Text style={styles.cardSub}>{item.location}</Text>
         </View>
@@ -252,6 +254,7 @@ export default function LostAndFoundScreen() {
           />
         </View>
         <View style={{ flex: 1 }}>
+          <Text style={styles.cardId}>#{item.id.slice(0, 8)}</Text>
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Text style={styles.cardSub}>
             Reported: {new Date(item.createdAt).toLocaleDateString()}
@@ -326,10 +329,12 @@ export default function LostAndFoundScreen() {
           onPress={() => setActiveTab("report")}
         >
           <Text
-            style={[
-              styles.tabText,
-              activeTab === "report" && styles.tabTextActive,
-            ]}
+            className="font-sn-pro-bold"
+            style={
+              activeTab === "report"
+                ? styles.tabTextActive
+                : styles.tabTextInactive
+            }
           >
             Report Lost
           </Text>
@@ -339,10 +344,12 @@ export default function LostAndFoundScreen() {
           onPress={() => setActiveTab("found")}
         >
           <Text
-            style={[
-              styles.tabText,
-              activeTab === "found" && styles.tabTextActive,
-            ]}
+            className="font-sn-pro-bold"
+            style={
+              activeTab === "found"
+                ? styles.tabTextActive
+                : styles.tabTextInactive
+            }
           >
             Found Items
           </Text>
@@ -352,10 +359,12 @@ export default function LostAndFoundScreen() {
           onPress={() => setActiveTab("history")}
         >
           <Text
-            style={[
-              styles.tabText,
-              activeTab === "history" && styles.tabTextActive,
-            ]}
+            className="font-sn-pro-bold"
+            style={
+              activeTab === "history"
+                ? styles.tabTextActive
+                : styles.tabTextInactive
+            }
           >
             My History
           </Text>
@@ -519,20 +528,31 @@ export default function LostAndFoundScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 5,
+    paddingTop: 10,
+  },
   header: { padding: 20, backgroundColor: "white" },
   headerTitle: { fontSize: 24, fontWeight: "bold", color: "#111827" },
 
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "white",
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
   },
-  tab: { marginRight: 20, paddingBottom: 10 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: "#4F46E5" },
-  tabText: { fontSize: 16, color: "#6B7280", fontWeight: "600" },
-  tabTextActive: { color: "#4F46E5" },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 8 },
+  tabActive: {
+    backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  tabTextActive: { fontWeight: "600", color: "#111827" },
+  tabTextInactive: { fontWeight: "600", color: "#6B7280" },
 
   content: { flex: 1 },
 
@@ -606,6 +626,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     justifyContent: "center",
     alignItems: "center",
+  },
+  cardId: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    fontFamily: "monospace",
+    marginBottom: 2,
   },
   cardTitle: { fontSize: 16, fontWeight: "bold", color: "#111827" },
   cardSub: { fontSize: 12, color: "#6B7280" },

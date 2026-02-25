@@ -2,13 +2,17 @@ import { api } from "./api";
 
 export interface AssignedComplaint {
   id: string;
+  title: string;
   description: string;
   status: "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "ESCALATED" | "REJECTED";
   priority: "HIGH" | "MEDIUM" | "LOW";
   createdAt: string;
   residentId: string;
   category: string;
-  location?: string; // If available
+  name: string;
+  room: string;
+  block: string;
+  phone: string;
 }
 
 export interface StaffProfile {
@@ -26,8 +30,9 @@ export interface StaffProfile {
 }
 
 // 1. Get Assigned Complaints
-export const getAssignedComplaints = async () => {
-  const response = await api.get("/staff/complaints");
+export const getAssignedComplaints = async (status?: string) => {
+  const params = status ? { status } : undefined;
+  const response = await api.get("/staff/complaints", { params });
   return response.data;
 };
 

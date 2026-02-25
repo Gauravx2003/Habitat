@@ -4,6 +4,7 @@ import {
   createResidentController,
   getHostelBlocksController,
   getBlockRoomsController,
+  getRoomTypesByBlockController,
   createStaffController,
   getRoomResidentsController,
 } from "./userCreation.controller";
@@ -29,6 +30,13 @@ router.get(
   authenticate,
   authorize(["ADMIN"]),
   getBlockRoomsController,
+);
+
+router.get(
+  "/roomTypes/:blockId",
+  authenticate,
+  authorize(["ADMIN"]),
+  getRoomTypesByBlockController,
 );
 
 router.post(

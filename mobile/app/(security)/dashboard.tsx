@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CameraView, Camera } from "expo-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { useSelector, useDispatch } from "react-redux";
 import { useRouter } from "expo-router";
@@ -21,6 +22,7 @@ import {
   ProfileMenuModal,
   MenuOption,
 } from "../../components/ProfileMenuModal";
+import { UniversalScanner } from "../../components/UniversalScanner";
 
 export default function SecurityDashboard() {
   const router = useRouter();
@@ -28,28 +30,12 @@ export default function SecurityDashboard() {
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.name || "Security";
 
-  console.log("user", user?.name);
-
   const [menuVisible, setMenuVisible] = useState(false);
 
-  // Camera / Scanner
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  // --- NEW CAMERA LOGIC ---
+  const [permission, requestPermission] = useCameraPermissions();
+  const isFocused = useIsFocused();
   const [isScanning, setIsScanning] = useState(false);
-  const [scanned, setScanned] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [scanResult, setScanResult] = useState<{
-    message: string;
-    mode: "IN" | "OUT";
-    type?: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
-    };
-    getCameraPermissions();
-  }, []);
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -104,47 +90,16 @@ export default function SecurityDashboard() {
     },
   ];
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (scanned || loading) return;
-    setScanned(true);
-    setLoading(true);
-
-    try {
-      const response = await api.post("/gate-pass/scan", { qrToken: data });
-      const result = response.data;
-      setScanResult(result);
-      setIsScanning(false);
-    } catch (error: any) {
-      console.error("Scan Failed:", error);
-      Alert.alert(
-        "Scan Failed",
-        error.response?.data?.message || "Invalid QR Code",
-        [{ text: "OK", onPress: () => setScanned(false) }],
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const startScan = () => {
-    setScanned(false);
-    setScanResult(null);
     setIsScanning(true);
   };
 
   const closeScanner = () => {
     setIsScanning(false);
-    setScanned(false);
-  };
-
-  const scanNext = () => {
-    setScanResult(null);
-    setScanned(false);
-    setIsScanning(true);
   };
 
   // ─── PERMISSION SCREENS ───────────────────────────────────
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#2563EB" />
@@ -154,12 +109,12 @@ export default function SecurityDashboard() {
       </View>
     );
   }
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={[styles.container, styles.center]}>
         <Text style={{ color: "#94A3B8" }}>No access to camera</Text>
         <TouchableOpacity
-          onPress={() => Camera.requestCameraPermissionsAsync()}
+          onPress={requestPermission} // <-- Updated to use the hook's function
           style={{ marginTop: 20 }}
         >
           <Text style={{ color: "#4ADE80" }}>Grant Permission</Text>
@@ -168,79 +123,9 @@ export default function SecurityDashboard() {
     );
   }
 
-  // ─── 1. RESULT SCREEN ─────────────────────────────────────
-  if (scanResult) {
-    return (
-      <SafeAreaView style={[styles.container, styles.bgSuccess]}>
-        <View style={styles.resultCard}>
-          <Feather name="check-circle" size={80} color="white" />
-          <Text style={styles.resultTitle}>{scanResult.message}</Text>
-          <Text style={styles.resultSub}>
-            {scanResult.mode === "IN"
-              ? "Student has Entered"
-              : "Student has Left"}
-          </Text>
-          {scanResult.type && (
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeText}>{scanResult.type}</Text>
-            </View>
-          )}
-
-          <View style={{ width: "100%", gap: 16 }}>
-            <TouchableOpacity style={styles.resetBtn} onPress={scanNext}>
-              <Text style={styles.resetText}>Scan Next</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.resetBtn, { backgroundColor: "rgba(0,0,0,0.2)" }]}
-              onPress={() => setScanResult(null)}
-            >
-              <Text style={[styles.resetText, { color: "white" }]}>
-                Back to Dashboard
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   // ─── 2. SCANNER SCREEN ────────────────────────────────────
   if (isScanning) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.scannerHeader}>
-          <TouchableOpacity onPress={closeScanner} style={styles.closeBtn}>
-            <Feather name="x" size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.scannerTitle}>Scanning...</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={styles.scannerContainer}>
-          <CameraView
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-            barcodeScannerSettings={{
-              barcodeTypes: ["qr"],
-            }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={styles.overlay}>
-            <View style={styles.scanFrame} />
-            <Text style={styles.scanText}>Align QR code within frame</Text>
-          </View>
-
-          {loading && (
-            <View style={styles.loaderOverlay}>
-              <ActivityIndicator size="large" color="white" />
-              <Text style={{ color: "white", marginTop: 10 }}>
-                Verifying...
-              </Text>
-            </View>
-          )}
-        </View>
-      </SafeAreaView>
-    );
+    return <UniversalScanner isFocused={isFocused} onClose={closeScanner} />;
   }
 
   // ─── 3. DASHBOARD (LANDING) ───────────────────────────────
@@ -426,118 +311,6 @@ const styles = StyleSheet.create({
   },
 
   // Scanner View
-  scannerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scannerTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  scannerContainer: {
-    flex: 1,
-    marginHorizontal: 0,
-    marginTop: 10,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    overflow: "hidden",
-    backgroundColor: "black",
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scanFrame: {
-    width: 260,
-    height: 260,
-    borderWidth: 2,
-    borderColor: "#4ADE80",
-    borderRadius: 24,
-    backgroundColor: "transparent",
-  },
-  scanText: {
-    color: "white",
-    marginTop: 24,
-    fontSize: 14,
-    fontWeight: "600",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-  loaderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  // Result
-  bgSuccess: { backgroundColor: "#15803D" },
-  resultCard: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 30,
-  },
-  resultTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "white",
-    marginTop: 24,
-    textAlign: "center",
-  },
-  resultSub: {
-    fontSize: 20,
-    color: "#BBF7D0",
-    marginTop: 12,
-    marginBottom: 32,
-    textAlign: "center",
-  },
-  typeBadge: {
-    backgroundColor: "white",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 100,
-    marginBottom: 60,
-    shadowColor: "black",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  typeText: {
-    color: "#15803D",
-    fontWeight: "800",
-    fontSize: 18,
-    letterSpacing: 1,
-  },
-  resetBtn: {
-    backgroundColor: "white",
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: "center",
-    width: "100%",
-  },
-  resetText: {
-    color: "#15803D",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
 
   // ─── Profile Menu Modal ───
   modalBackdrop: {

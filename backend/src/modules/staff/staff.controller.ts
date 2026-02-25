@@ -96,8 +96,8 @@ export const getStaffProfileController = async (
       .select({
         name: users.name,
         email: users.email,
-        phone: staffProfiles.phone,
-        dateOfBirth: staffProfiles.dateOfBirth,
+        phone: users.phone,
+        dateOfBirth: users.dateOfBirth,
         specialization: staffProfiles.specialization,
         role: users.role,
         organization: organizations.name,
@@ -142,8 +142,8 @@ export const getSecurityProfileController = async (
       .select({
         name: users.name,
         email: users.email,
-        phone: securityProfiles.phone,
-        dateOfBirth: securityProfiles.dateOfBirth,
+        phone: users.phone,
+        dateOfBirth: users.dateOfBirth,
         assignedGate: securityProfiles.assignedGate,
         shift: securityProfiles.shift,
         role: users.role,

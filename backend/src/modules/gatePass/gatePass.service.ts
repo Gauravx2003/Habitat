@@ -39,7 +39,7 @@ export const approveGatePass = async (requestId: string, adminId: string) => {
   };
 
   // B. Sign it (This string becomes the QR code)
-  const token = jwt.sign(qrPayload, JWT_SECRET);
+  const token = `GATE:${jwt.sign(qrPayload, JWT_SECRET)}`;
 
   // C. Update DB with Status + Token
   const [updatedPass] = await db

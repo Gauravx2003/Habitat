@@ -5,6 +5,7 @@ import {
   updateMessComplaint,
   getMessIssues,
   getMyIssues,
+  getMessIssueAnalytics,
 } from "./messIssue.service";
 
 import {
@@ -96,5 +97,18 @@ export const getMyMessIssuesController = async (
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch mess issues" });
+  }
+};
+
+export const getMessIssueAnalyticsController = async (
+  req: Authenticate,
+  res: Response,
+) => {
+  try {
+    const analytics = await getMessIssueAnalytics();
+    return res.status(200).json(analytics);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to fetch analytics" });
   }
 };

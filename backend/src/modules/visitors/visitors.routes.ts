@@ -4,8 +4,10 @@ import {
   createRequestController,
   getMyVisitorRequestsController,
   getPendingRequestsController,
+  getAllRequestsController,
   updateRequestController,
   getTodaysVisitorsController,
+  verifyVisitorController,
 } from "./visitors.controller";
 
 const router = Router();
@@ -31,6 +33,13 @@ router.get(
   getPendingRequestsController,
 );
 
+router.get(
+  "/all",
+  authenticate,
+  authorize(["ADMIN"]),
+  getAllRequestsController,
+);
+
 router.patch(
   "/:id/update",
   authenticate,
@@ -43,6 +52,13 @@ router.get(
   authenticate,
   authorize(["ADMIN", "SECURITY"]),
   getTodaysVisitorsController,
+);
+
+router.post(
+  "/verify",
+  authenticate,
+  authorize(["SECURITY"]),
+  verifyVisitorController,
 );
 
 export default router;

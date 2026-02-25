@@ -19,6 +19,8 @@ const CreateStaffModal = ({ onClose, onSuccess }: CreateStaffModalProps) => {
   // Form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [staffType, setStaffType] = useState<"IN_HOUSE" | "VENDOR">("IN_HOUSE");
   const [specialization, setSpecialization] = useState("");
 
@@ -65,6 +67,8 @@ const CreateStaffModal = ({ onClose, onSuccess }: CreateStaffModalProps) => {
         {
           name,
           email,
+          phone,
+          dateOfBirth,
           staffType,
           specialization,
         },
@@ -133,6 +137,36 @@ const CreateStaffModal = ({ onClose, onSuccess }: CreateStaffModalProps) => {
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
               placeholder="staff@example.com"
             />
+          </div>
+
+          {/* Add phone and DOB adjacent */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Phone Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                placeholder="+1 234 567 8900"
+              />
+            </div>
+
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Date of Birth <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+              />
+            </div>
           </div>
 
           {/* Staff Type */}

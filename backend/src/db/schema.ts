@@ -37,6 +37,7 @@ export const roleEnum = pgEnum("role", [
   "STAFF",
   "ADMIN",
   "SECURITY",
+  "COOK",
 ]);
 
 export const staffTypeEnum = pgEnum("staff_type", ["IN_HOUSE", "VENDOR"]);
@@ -60,6 +61,7 @@ export const approvalStatusEnum = pgEnum("approval_status", [
   "PENDING",
   "APPROVED",
   "REJECTED",
+  "CLOSED",
 ]);
 
 export const lostAndFoundStatusEnum = pgEnum("lost_and_found_status", [
@@ -362,7 +364,7 @@ export const blocks = pgTable("blocks", {
     .notNull(),
 });
 
-export const room_types = pgTable("room_types", {
+export const roomTypes = pgTable("room_types", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id")
     .references(() => organizations.id)
@@ -381,7 +383,9 @@ export const rooms = pgTable("rooms", {
   blockId: uuid("block_id")
     .references(() => blocks.id)
     .notNull(),
-  type: uuid("type_id").references(() => room_types.id),
+  type: uuid("type_id")
+    .references(() => roomTypes.id)
+    .notNull(),
   currentOccupancy: integer("current_occupancy").default(0),
 });
 
@@ -394,6 +398,8 @@ export const users = pgTable("users", {
 
   name: varchar("name", { length: 100 }).notNull(),
   email: varchar("email", { length: 150 }).notNull().unique(),
+  phone: varchar("phone", { length: 15 }).unique().notNull(),
+  dateOfBirth: date("date_of_birth").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull(),
   isActive: boolean("is_active").default(true),
@@ -407,8 +413,6 @@ export const residentProfiles = pgTable("resident_profiles", {
     .primaryKey(),
   roomId: uuid("room_id").references(() => rooms.id),
   enrollmentNumber: varchar("enrollment_number", { length: 50 }).unique(),
-  phone: varchar("phone", { length: 15 }).unique().notNull(),
-  dateOfBirth: date("date_of_birth").notNull(),
   department: varchar("department", { length: 50 }),
   departmentId: varchar("department_id", { length: 20 }).unique(),
 });
@@ -419,8 +423,6 @@ export const staffProfiles = pgTable("staff_profiles", {
     .primaryKey(),
   staffType: staffTypeEnum("staff_type").notNull(),
   specialization: varchar("specialization", { length: 50 }),
-  phone: varchar("phone", { length: 15 }).unique().notNull(),
-  dateOfBirth: date("date_of_birth").notNull(),
   currentTasks: integer("current_tasks").default(0),
   maxActiveTasks: integer("max_active_tasks").default(5),
 });
@@ -429,8 +431,6 @@ export const securityProfiles = pgTable("security_profiles", {
   userId: uuid("user_id")
     .references(() => users.id)
     .primaryKey(),
-  phone: varchar("phone", { length: 15 }).unique().notNull(),
-  dateOfBirth: date("date_of_birth").notNull(),
   assignedGate: varchar("assigned_gate", { length: 50 }).notNull(),
   shift: varchar("shift", { length: 50 }).notNull(),
 });
@@ -484,7 +484,23 @@ export const complaintStatusHistory = pgTable("complaint_status_history", {
   oldStatus: complaintStatusEnum("old_status"),
   newStatus: complaintStatusEnum("new_status"),
   changedBy: uuid("changed_by").references(() => users.id),
+  changedTo: uuid("changed_to").references(() => users.id),
   changedAt: timestamp("changed_at").defaultNow(),
+});
+
+export const complaintMessages = pgTable("complaint_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  complaintId: uuid("complaint_id")
+    .references(() => complaints.id)
+    .notNull(),
+  senderId: uuid("sender_id")
+    .references(() => users.id)
+    .notNull(), // Can be Resident or Staff
+
+  message: text("message").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const gatePasses = pgTable("gate_passes", {

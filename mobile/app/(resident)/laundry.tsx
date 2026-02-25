@@ -134,8 +134,6 @@ export default function LaundryScreen() {
     0,
   );
 
-  console.log("Total Slots Available:", totalSlotsAvailable);
-
   // ─── Helpers to extract machine number from name ─────
   const getMachineNumber = (machine: Resource): number => {
     const match = machine.name.match(/\d+/);

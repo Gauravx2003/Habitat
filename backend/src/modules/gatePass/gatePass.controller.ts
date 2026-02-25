@@ -50,7 +50,7 @@ export const createGatePassController = async (
         finalInTime = new Date(inTime);
       } else {
         // Default: 4 hours buffer if not specified
-        finalInTime = new Date(finalOutTime.getTime() + 4 * 60 * 60 * 1000);
+        finalInTime = new Date(finalOutTime.getTime() + 2 * 60 * 60 * 1000);
       }
     } else if (type === "ENTRY") {
       dbType = "ENTRY";
@@ -174,6 +174,8 @@ export const updateGatePassController = async (
 export const scanQrController = async (req: Authenticate, res: Response) => {
   try {
     const { qrToken } = req.body;
+
+    console.log("Token", qrToken);
 
     if (!qrToken) return res.status(400).json({ message: "QR Token required" });
 

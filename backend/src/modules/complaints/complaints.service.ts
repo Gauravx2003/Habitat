@@ -7,6 +7,8 @@ import {
   rooms,
   escalations,
   complaintStatusHistory,
+  complaintMessages,
+  blocks,
 } from "../../db/schema";
 import { createNotification } from "../notifications/notifications.service";
 
@@ -79,6 +81,12 @@ export const createComplaint = async (
       })
       .returning();
 
+    await tx.insert(complaintStatusHistory).values({
+      complaintId: complaint.id,
+      newStatus: "CREATED",
+      changedBy: residentId,
+    });
+
     // B. Handle Staff Assignment Side Effects
     if (assignedStaff) {
       // Increment the current_tasks counter for the assigned staff
@@ -88,6 +96,13 @@ export const createComplaint = async (
           currentTasks: sql`${staffProfiles.currentTasks} + 1`,
         })
         .where(eq(staffProfiles.userId, assignedStaff));
+
+      await tx.insert(complaintStatusHistory).values({
+        complaintId: complaint.id,
+        newStatus: "ASSIGNED",
+        changedBy: residentId,
+        changedTo: assignedStaff,
+      });
 
       // Create notification
       await createNotification(tx, assignedStaff, "You have a new complaint");
@@ -161,6 +176,7 @@ export const getEscalatedComplaints = async () => {
       categoryName: complaintCategories.name,
       residentName: resident.name,
       roomNumber: rooms.roomNumber,
+      block: blocks.name,
       assignedStaffName: staff.name,
     })
     .from(complaints)
@@ -170,6 +186,7 @@ export const getEscalatedComplaints = async () => {
     )
     .leftJoin(resident, eq(complaints.residentId, resident.id))
     .leftJoin(rooms, eq(complaints.roomId, rooms.id))
+    .leftJoin(blocks, eq(rooms.blockId, blocks.id))
     .leftJoin(staff, eq(complaints.assignedStaff, staff.id))
     .where(eq(complaints.status, "ESCALATED"));
 
@@ -244,6 +261,7 @@ export const reassignComplaint = async (
       oldStatus: existingComplaint.status,
       changedAt: new Date(),
       changedBy: adminId,
+      changedTo: newStaffId,
     });
 
     //Create notification for the staff
@@ -257,27 +275,37 @@ export const residentCloseComplaint = async (
   complaintId: string,
   residentId: string,
 ) => {
-  const [complaint] = await db
-    .select()
-    .from(complaints)
-    .where(
-      and(
-        eq(complaints.id, complaintId),
-        eq(complaints.residentId, residentId),
-      ),
-    );
+  return db.transaction(async (tx) => {
+    const [complaint] = await tx
+      .select()
+      .from(complaints)
+      .where(
+        and(
+          eq(complaints.id, complaintId),
+          eq(complaints.residentId, residentId),
+        ),
+      );
 
-  if (!complaint) throw new Error("Complaint not found or unauthorized");
-  if (complaint.status !== "RESOLVED")
-    throw new Error("Only RESOLVED complaints can be closed");
+    if (!complaint) throw new Error("Complaint not found or unauthorized");
+    if (complaint.status !== "RESOLVED")
+      throw new Error("Only RESOLVED complaints can be closed");
 
-  const [closedComplaint] = await db
-    .update(complaints)
-    .set({ status: "CLOSED" })
-    .where(eq(complaints.id, complaintId))
-    .returning();
+    const [closedComplaint] = await tx
+      .update(complaints)
+      .set({ status: "CLOSED" })
+      .where(eq(complaints.id, complaintId))
+      .returning();
 
-  return closedComplaint;
+    await tx.insert(complaintStatusHistory).values({
+      complaintId,
+      newStatus: "CLOSED",
+      oldStatus: complaint.status,
+      changedAt: new Date(),
+      changedBy: residentId,
+    });
+
+    return closedComplaint;
+  });
 };
 
 export const residentRejectResolution = async (
@@ -306,19 +334,20 @@ export const residentRejectResolution = async (
       .where(eq(complaints.id, complaintId))
       .returning();
 
+    const [admin] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.role, "ADMIN"));
+    const now = new Date();
+
     await tx.insert(complaintStatusHistory).values({
       complaintId,
       newStatus: "ESCALATED",
       oldStatus: complaint.status,
       changedAt: new Date(),
       changedBy: residentId,
+      changedTo: admin?.id,
     });
-
-    const [admin] = await tx
-      .select()
-      .from(users)
-      .where(eq(users.role, "ADMIN"));
-    const now = new Date();
 
     await tx.insert(escalations).values({
       complaintId: complaint.id,
@@ -333,15 +362,35 @@ export const residentRejectResolution = async (
   });
 };
 
-export const adminCloseComplaint = async (complaintId: string) => {
+export const adminCloseComplaint = async (
+  complaintId: string,
+  adminId: string,
+) => {
   // Admin forceful closure (e.g., resident made a false claim)
-  const [closedComplaint] = await db
-    .update(complaints)
-    .set({ status: "CLOSED" })
-    .where(eq(complaints.id, complaintId))
-    .returning();
+  return db.transaction(async (tx) => {
+    const [complaint] = await tx
+      .select()
+      .from(complaints)
+      .where(eq(complaints.id, complaintId));
 
-  return closedComplaint;
+    if (!complaint) throw new Error("Complaint not found");
+
+    const [closedComplaint] = await tx
+      .update(complaints)
+      .set({ status: "CLOSED" })
+      .where(eq(complaints.id, complaintId))
+      .returning();
+
+    await tx.insert(complaintStatusHistory).values({
+      complaintId,
+      newStatus: "CLOSED",
+      oldStatus: complaint.status,
+      changedAt: new Date(),
+      changedBy: adminId,
+    });
+
+    return closedComplaint;
+  });
 };
 
 export const autoAssignPendingComplaint = async (tx: any, staffId: string) => {
@@ -397,6 +446,7 @@ export const autoAssignPendingComplaint = async (tx: any, staffId: string) => {
     newStatus: "ASSIGNED",
     oldStatus: "CREATED",
     changedAt: new Date(),
+    changedTo: staffId,
   });
 
   // 5. Re-increment the staff member's task count (since we just gave them a new one)
@@ -413,4 +463,63 @@ export const autoAssignPendingComplaint = async (tx: any, staffId: string) => {
     staffId,
     "A pending complaint has been auto-assigned to you from the queue.",
   );
+};
+
+export const getComplaintThread = async (complaintId: string) => {
+  // Fetch messages ordered by oldest first (standard chat flow)
+  return await db
+    .select({
+      id: complaintMessages.id,
+      message: complaintMessages.message,
+      createdAt: complaintMessages.createdAt,
+      senderId: complaintMessages.senderId,
+      // Fetch sender name to display "John (Staff)" or "Rahul (Resident)"
+      senderName: users.name,
+      senderRole: users.role,
+    })
+    .from(complaintMessages)
+    .innerJoin(users, eq(complaintMessages.senderId, users.id))
+    .where(eq(complaintMessages.complaintId, complaintId))
+    .orderBy(asc(complaintMessages.createdAt));
+};
+
+export const addMessageToThread = async (
+  complaintId: string,
+  senderId: string,
+  message: string,
+) => {
+  // 1. Check if complaint is already resolved/closed
+  const [complaint] = await db
+    .select()
+    .from(complaints)
+    .where(eq(complaints.id, complaintId));
+
+  if (!complaint) throw new Error("Complaint not found");
+  if (complaint.status === "RESOLVED" || complaint.status === "CLOSED") {
+    throw new Error("Cannot send messages on a closed complaint.");
+  }
+
+  // 2. Insert Message
+  const [newMessage] = await db
+    .insert(complaintMessages)
+    .values({
+      complaintId,
+      senderId,
+      message,
+    })
+    .returning();
+
+  // 3. 🚨 The Smart Notification Routing 🚨
+  // If Resident sent it -> Notify the Assigned Staff
+  // If Staff sent it -> Notify the Resident
+
+  /*
+  if (senderId === complaint.userId && complaint.assignedTo) {
+      sendPushNotification(complaint.assignedTo, "New message from Resident", message);
+  } else if (senderId === complaint.assignedTo) {
+      sendPushNotification(complaint.userId, "Update from Maintenance Staff", message);
+  }
+  */
+
+  return newMessage;
 };

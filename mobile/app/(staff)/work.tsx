@@ -7,11 +7,14 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   Alert,
+  ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { ComplaintFilter } from "../../components/complaints/ComplaintFilter";
+import { ComplaintChatModal } from "../../components/complaints/ComplaintChatModal";
 import {
   getAssignedComplaints,
   updateComplaintStatus,
@@ -24,14 +27,22 @@ export default function WorkScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<
+    "ALL" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "ESCALATED"
+  >("ALL");
 
   const [isActive, setIsActive] = useState(true);
+
+  // Chat modal state
+  const [chatModalVisible, setChatModalVisible] = useState(false);
+  const [chatComplaintId, setChatComplaintId] = useState("");
+  const [chatComplaintTitle, setChatComplaintTitle] = useState("");
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [complaintsData, profileData] = await Promise.all([
-        getAssignedComplaints(),
+        getAssignedComplaints(filter === "ALL" ? undefined : filter),
         getStaffProfile(),
       ]);
       setComplaints(complaintsData);
@@ -47,7 +58,7 @@ export default function WorkScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, []),
+    }, [filter]),
   );
 
   const onRefresh = async () => {
@@ -130,7 +141,7 @@ export default function WorkScreen() {
                 </Text>
               </View>
             </View>
-            <Text style={styles.cardTitle}>{item.category}</Text>
+            <Text style={styles.cardTitle}>{item.title}</Text>
           </View>
           <View
             style={[
@@ -160,18 +171,37 @@ export default function WorkScreen() {
         {/* Content */}
         <Text style={styles.cardDesc}>{item.description}</Text>
 
-        <View style={styles.infoRow}>
-          <Feather name="clock" size={14} color="#6B7280" />
-          <Text style={styles.infoText}>
-            {new Date(item.createdAt).toLocaleDateString()}
-          </Text>
-          {item.location && (
+        <View>
+          <View style={styles.infoRow}>
+            <Feather name="clock" size={14} color="#6B7280" />
+            <Text style={styles.infoText}>
+              {new Date(item.createdAt).toLocaleDateString()}
+            </Text>
+
+            {item.name && (
+              <>
+                <View style={styles.dot} />
+                <Feather name="user" size={14} color="#6B7280" />
+                <Text style={styles.infoText}>{item.name}</Text>
+              </>
+            )}
+          </View>
+          {/* Second Row: Block & Room */}
+          <View style={styles.infoRow}>
+            {item.block && item.room && (
+              <View style={styles.infoRow}>
+                <Feather name="map-pin" size={14} color="#6B7280" />
+                <Text style={styles.infoText}>
+                  {item.block} - {item.room}
+                </Text>
+              </View>
+            )}
             <>
               <View style={styles.dot} />
-              <Feather name="map-pin" size={14} color="#6B7280" />
-              <Text style={styles.infoText}>{item.location}</Text>
+              <Feather name="phone" size={14} color="#6B7280" />
+              <Text style={styles.infoText}>{item.phone}</Text>
             </>
-          )}
+          </View>
         </View>
 
         {/* Actions */}
@@ -226,14 +256,40 @@ export default function WorkScreen() {
             </View>
           )}
         </View>
+
+        {/* Chat Button for Staff */}
+        <TouchableOpacity
+          style={styles.chatActionBtn}
+          onPress={() => {
+            setChatComplaintId(item.id);
+            setChatComplaintTitle(item.title);
+            setChatModalVisible(true);
+          }}
+        >
+          <Feather name="message-circle" size={16} color="#4F46E5" />
+          <Text style={styles.chatActionText}>Open Chat / Comments</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Assigned Work</Text>
+        <Text className="font-sn-pro-bold" style={styles.headerTitle}>
+          Assigned Work
+        </Text>
+      </View>
+
+      <View
+        style={{
+          backgroundColor: "white",
+          borderBottomWidth: 1,
+          borderBottomColor: "#F3F4F6",
+          paddingHorizontal: 20,
+        }}
+      >
+        <ComplaintFilter filter={filter} setFilter={setFilter} />
       </View>
 
       {!isActive && !loading && (
@@ -262,6 +318,14 @@ export default function WorkScreen() {
           ) : null
         }
       />
+
+      {/* Chat Modal */}
+      <ComplaintChatModal
+        visible={chatModalVisible}
+        complaintId={chatComplaintId}
+        complaintTitle={chatComplaintTitle}
+        onClose={() => setChatModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -274,7 +338,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#111827" },
+  headerTitle: { fontSize: 26, color: "#111827" },
 
   card: {
     backgroundColor: "white",
@@ -309,7 +373,8 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    flexWrap: "wrap",
+    gap: 9,
     marginBottom: 16,
   },
   infoText: { fontSize: 12, color: "#6B7280" },
@@ -355,6 +420,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   resolvedText: { color: "#15803D", fontWeight: "600", fontSize: 14 },
+
+  chatActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  chatActionText: { color: "#4F46E5", fontWeight: "600", fontSize: 14 },
 
   emptyState: { alignItems: "center", marginTop: 60 },
   emptyText: { color: "#9CA3AF", marginTop: 16, fontSize: 16 },
