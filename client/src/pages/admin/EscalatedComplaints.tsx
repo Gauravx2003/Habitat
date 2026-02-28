@@ -7,15 +7,29 @@ import {
 } from "../../services/complaint.service";
 import {
   AlertCircle,
+  BarChart3,
   CheckCircle2,
   Clock,
   FileText,
+  History,
   Home,
+  Loader2,
+  MessageSquareWarning,
   User,
   UserCheck,
   UserRoundX,
   X,
 } from "lucide-react";
+
+import EscalatedStatCards from "../../components/escalatedAnalytics/EscalatedStatCards";
+import EscalatedTrendChart from "../../components/escalatedAnalytics/EscalatedTrendChart";
+import EscalatedCategoryPieChart from "../../components/escalatedAnalytics/EscalatedCategoryPieChart";
+import EscalatedBlockChart from "../../components/escalatedAnalytics/EscalatedBlockChart";
+import EscalatedTopStaffTable from "../../components/escalatedAnalytics/EscalatedTopStaffTable";
+import EscalatedTopResidentsTable from "../../components/escalatedAnalytics/EscalatedTopResidentsTable";
+import EscalatedBlockCategoryTable from "../../components/escalatedAnalytics/EscalatedBlockCategoryTable";
+import ReassignmentHistoryTable from "../../components/escalatedAnalytics/ReassignmentHistoryTable";
+import { SkeletonCard } from "../../components/SkeletonCard";
 
 interface Complaint {
   id: string;
@@ -32,6 +46,10 @@ interface Complaint {
 }
 
 const EscalatedComplaints = () => {
+  const [activeTab, setActiveTab] = useState<
+    "complaints" | "analytics" | "history"
+  >("complaints");
+
   const [escalatedComplaints, setEscalatedComplaints] = useState<Complaint[]>(
     [],
   );
@@ -44,9 +62,26 @@ const EscalatedComplaints = () => {
   const [isReassigning, setIsReassigning] = useState(false);
   const [isLoadingStaff, setIsLoadingStaff] = useState(false);
 
+  // Analytics state
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // History state
+  const [reassignHistory, setReassignHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   useEffect(() => {
     fetchEscalatedComplaints();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "analytics" && !analytics) {
+      fetchAnalytics();
+    }
+    if (activeTab === "history" && reassignHistory.length === 0) {
+      fetchHistory();
+    }
+  }, [activeTab]);
 
   const fetchEscalatedComplaints = () => {
     setIsLoading(true);
@@ -61,6 +96,30 @@ const EscalatedComplaints = () => {
       .finally(() => {
         setIsLoading(false);
       });
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      const response = await api.get("/complaints/escalated/analytics");
+      setAnalytics(response.data);
+    } catch (error) {
+      console.error("Failed to fetch analytics:", error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const fetchHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      const response = await api.get("/complaints/reassignment-history");
+      setReassignHistory(response.data);
+    } catch (error) {
+      console.error("Failed to fetch reassignment history:", error);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleReassignClick = async (complaint: Complaint) => {
@@ -88,6 +147,10 @@ const EscalatedComplaints = () => {
       setSelectedComplaint(null);
       setSelectedStaffId("");
       fetchEscalatedComplaints();
+      // Refresh history if it was loaded
+      if (reassignHistory.length > 0) {
+        fetchHistory();
+      }
     } catch (error) {
       console.error("Error reassigning complaint:", error);
     } finally {
@@ -136,111 +199,198 @@ const EscalatedComplaints = () => {
     }
   };
 
+  const tabs = [
+    {
+      key: "complaints" as const,
+      label: "Complaints",
+      icon: <MessageSquareWarning className="w-4 h-4" />,
+    },
+    {
+      key: "analytics" as const,
+      label: "Analytics",
+      icon: <BarChart3 className="w-4 h-4" />,
+    },
+    {
+      key: "history" as const,
+      label: "Reassignment History",
+      icon: <History className="w-4 h-4" />,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-            Escalated Complaints
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Reassign escalated complaints to appropriate staff members
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+          <MessageSquareWarning className="w-6 h-6 text-indigo-600" />
+          Escalated Complaints
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Manage escalated complaints, view analytics, and track reassignment
+          history
+        </p>
       </div>
 
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-indigo-600"></div>
-        </div>
-      ) : escalatedComplaints.length === 0 ? (
-        <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
-          <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-600">No escalated complaints</p>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
-          {escalatedComplaints.map((complaint) => (
-            <div
-              key={complaint.id}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex gap-2">
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getStatusColor(
-                      complaint.status,
-                    )}`}
-                  >
-                    {getStatusIcon(complaint.status)}
-                    {complaint.status}
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getPriorityColor(
-                      complaint.priority,
-                    )}`}
-                  >
-                    {complaint.priority}
-                  </span>
-                </div>
-                <span className="text-xs text-slate-500">
-                  {new Date(complaint.createdAt).toLocaleDateString()}
-                </span>
-              </div>
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? "border-indigo-600 text-indigo-700"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {tab.icon}
+              {tab.label}
+            </div>
+          </button>
+        ))}
+      </div>
 
-              <h3 className="font-semibold text-slate-900 mb-2">
-                {complaint.title || "Untitled Complaint"}
-              </h3>
+      {/* ─── ANALYTICS TAB ─── */}
+      {activeTab === "analytics" &&
+        (analyticsLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+          </div>
+        ) : analytics ? (
+          <div className="space-y-6">
+            {/* Stat Cards */}
+            <EscalatedStatCards
+              totalEscalations={analytics.totalEscalations}
+              escalatedStatusCounts={analytics.escalatedStatusCounts}
+              overallStatusCounts={analytics.overallStatusCounts}
+            />
 
-              <div className="flex flex-wrap gap-2 mb-3 text-xs">
-                <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded">
-                  {complaint.categoryName}
-                </span>
-              </div>
+            {/* Trend Chart */}
+            <EscalatedTrendChart dailyTrend={analytics.dailyTrend} />
 
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="text-sm">
-                  <span className="font-medium text-slate-700 block">
-                    {complaint.residentName}
-                  </span>
-                  <div className="flex items-center gap-1 text-xs text-slate-500">
-                    <Home className="w-3 h-3" />
-                    <span>
-                      {complaint.block}-{complaint.roomNumber}
+            {/* Category + Block Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <EscalatedCategoryPieChart
+                data={analytics.categoryDistribution}
+                blockCategoryData={analytics.blockCategoryData}
+              />
+              <EscalatedBlockChart data={analytics.blockDistribution} />
+            </div>
+
+            {/* Block × Category Heatmap */}
+            <EscalatedBlockCategoryTable data={analytics.blockCategoryData} />
+
+            {/* Top Staff + Top Residents Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <EscalatedTopStaffTable data={analytics.topStaff} />
+              <EscalatedTopResidentsTable data={analytics.topResidents} />
+            </div>
+          </div>
+        ) : null)}
+
+      {/* ─── HISTORY TAB ─── */}
+      {activeTab === "history" && (
+        <ReassignmentHistoryTable
+          data={reassignHistory}
+          isLoading={historyLoading}
+        />
+      )}
+
+      {/* ─── COMPLAINTS TAB ─── */}
+      {activeTab === "complaints" && (
+        <>
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <SkeletonCard key={index} />
+            ))
+          ) : escalatedComplaints.length === 0 ? (
+            <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
+              <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+              <p className="text-slate-600">No escalated complaints</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {escalatedComplaints.map((complaint) => (
+                <div
+                  key={complaint.id}
+                  className="bg-white rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex gap-2">
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getStatusColor(
+                          complaint.status,
+                        )}`}
+                      >
+                        {getStatusIcon(complaint.status)}
+                        {complaint.status}
+                      </span>
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getPriorityColor(
+                          complaint.priority,
+                        )}`}
+                      >
+                        {complaint.priority}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {new Date(complaint.createdAt).toLocaleDateString()}
                     </span>
                   </div>
+
+                  <h3 className="font-semibold text-slate-900 mb-2">
+                    {complaint.title || "Untitled Complaint"}
+                  </h3>
+
+                  <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                    <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded">
+                      {complaint.categoryName}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div className="text-sm">
+                      <span className="font-medium text-slate-700 block">
+                        {complaint.residentName}
+                      </span>
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <Home className="w-3 h-3" />
+                        <span>
+                          {complaint.block}-{complaint.roomNumber}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+                    {complaint.description}
+                  </p>
+
+                  <div className="text-xs text-slate-600 mb-3 flex items-center gap-1">
+                    {complaint.assignedStaffName ? (
+                      <UserCheck className="w-3 h-3" />
+                    ) : (
+                      <UserRoundX className="w-3 h-3" />
+                    )}
+                    Currently assigned to:{" "}
+                    {complaint.assignedStaffName ?? "No one"}
+                  </div>
+
+                  <button
+                    onClick={() => handleReassignClick(complaint)}
+                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                  >
+                    Reassign
+                  </button>
                 </div>
-              </div>
-
-              <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                {complaint.description}
-              </p>
-
-              <div className="text-xs text-slate-600 mb-3 flex items-center gap-1">
-                {/* Conditional Icon Rendering */}
-                {complaint.assignedStaffName ? (
-                  <UserCheck className="w-3 h-3" />
-                ) : (
-                  <UserRoundX className="w-3 h-3" />
-                )}
-                {/* Text Content */}
-                Currently assigned to: {complaint.assignedStaffName ?? "No one"}
-              </div>
-
-              <button
-                onClick={() => handleReassignClick(complaint)}
-                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-              >
-                Reassign
-              </button>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* Reassignment Modal */}

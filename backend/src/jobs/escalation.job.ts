@@ -48,6 +48,7 @@ export const runEscalationJob = async () => {
       complaintId: complaint.id,
       level: 1,
       escalatedTo: admin?.id,
+      escalatedFrom: complaint.assignedStaff,
       escalatedAt: now,
       reason: "SLA Breached",
     });

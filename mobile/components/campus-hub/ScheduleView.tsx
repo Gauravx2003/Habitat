@@ -9,6 +9,32 @@ interface Props {
 
 const COLORS = ["#EA580C", "#2563EB", "#DC2626", "#10B981", "#8B5CF6"];
 
+function getDayLabel(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const targetDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+
+  if (targetDate.getTime() === today.getTime()) {
+    return "Today";
+  } else if (targetDate.getTime() === tomorrow.getTime()) {
+    return "Tomorrow";
+  } else {
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
+  }
+}
+
 export function ScheduleView({ schedule }: Props) {
   if (schedule.length === 0) {
     return (
@@ -29,82 +55,123 @@ export function ScheduleView({ schedule }: Props) {
     );
   });
 
+  // Group by date string (YYYY-MM-DD)
+  const grouped: Record<string, ScheduleItem[]> = {};
+  sorted.forEach((item) => {
+    if (!item.scheduledFor) return;
+    const dateKey = new Date(item.scheduledFor).toISOString().split("T")[0];
+    if (!grouped[dateKey]) grouped[dateKey] = [];
+    grouped[dateKey].push(item);
+  });
+
   return (
     <View className="mt-2">
-      {sorted.map((item, index) => {
-        const isPast = item.scheduledFor && new Date(item.scheduledFor) < now;
-        const time = item.scheduledFor
-          ? new Date(item.scheduledFor).toLocaleTimeString(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            })
-          : "TBA";
-
-        const color = COLORS[index % COLORS.length];
-        const displayColor = isPast ? "#9CA3AF" : color;
-
+      {Object.entries(grouped).map(([dateKey, items], groupIndex) => {
+        const label = getDayLabel(dateKey);
         return (
-          <View key={item.id} className="flex-row mb-2">
-            {/* Left: Time */}
-            <View className="w-20 items-end pr-4 pt-4">
-              <Text
-                className={`text-xs font-bold ${isPast ? "text-gray-300" : "text-gray-500"}`}
-              >
-                {time}
-              </Text>
-            </View>
-
-            {/* Middle: Timeline dot + line */}
-            <View className="items-center w-6">
-              <View
-                className="h-4 w-4 rounded-full border-2 mt-4 z-10"
-                style={{
-                  borderColor: displayColor,
-                  backgroundColor: isPast ? "#E5E7EB" : "white",
-                }}
-              >
-                <View
-                  className="h-2 w-2 rounded-full m-auto"
-                  style={{ backgroundColor: displayColor }}
-                />
-              </View>
-              {index < sorted.length - 1 && (
-                <View className="flex-1 w-0.5 bg-gray-200" />
-              )}
-            </View>
-
-            {/* Right: Task Card */}
+          <View key={dateKey} className="mb-4">
+            {/* Line break style date header */}
             <View
-              className="flex-1 ml-3 bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100"
-              style={{
-                backgroundColor: isPast ? "#F3F4F6" : "white",
-                borderColor: isPast ? "#E5E7EB" : "#F3F4F6",
-              }}
+              className={`flex-row items-center justify-center mb-4 ${groupIndex > 0 ? "mt-2" : ""}`}
             >
-              <View className="flex-row items-center mb-1.5">
-                <View
-                  className="h-8 w-8 rounded-lg items-center justify-center mr-3"
-                  style={{
-                    backgroundColor: isPast ? "#E5E7EB" : displayColor + "20",
-                  }}
-                >
-                  <Feather
-                    name="clock"
-                    size={16}
-                    color={isPast ? "#9CA3AF" : displayColor}
-                  />
-                </View>
-                <Text
-                  className={`text-base font-bold ${isPast ? "text-gray-500" : "text-gray-900"} ${isPast ? "line-through" : ""}`}
-                >
-                  {item.title}
-                </Text>
-              </View>
-              <Text className="text-gray-400 text-sm ml-11">
-                {item.description}
+              <View className="flex-1 h-[1px] bg-gray-200" />
+              <Text className="mx-4 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                {label}
               </Text>
+              <View className="flex-1 h-[1px] bg-gray-200" />
             </View>
+
+            {items.map((item, index) => {
+              const time = item.scheduledFor
+                ? new Date(item.scheduledFor).toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })
+                : "TBA";
+
+              const displayColor = COLORS[index % COLORS.length];
+
+              return (
+                <View key={item.id} className="flex-row mb-2">
+                  {/* Left: Time */}
+                  <View className="w-20 items-end pr-4 pt-4 mt-2">
+                    <Text className="text-xs font-bold text-gray-500">
+                      {time}
+                    </Text>
+                  </View>
+
+                  {/* Middle: Timeline dot + line */}
+                  <View style={{ width: 24, alignItems: "center" }}>
+                    {/* 1. The Dot */}
+                    <View
+                      style={{
+                        height: 10,
+                        width: 10,
+                        borderRadius: 5,
+                        borderWidth: 1.5,
+                        borderColor: displayColor,
+                        backgroundColor: "white",
+                        marginTop: 9,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 10,
+                      }}
+                    >
+                      <View
+                        style={{
+                          height: 4,
+                          width: 4,
+                          borderRadius: 2,
+                          backgroundColor: displayColor,
+                          opacity: 0.7,
+                        }}
+                      />
+                    </View>
+
+                    {/* 2. The Line */}
+                    {index < items.length - 1 && (
+                      <View
+                        style={{
+                          width: 1,
+                          flex: 1,
+                          backgroundColor: "#E5E7EB",
+                          marginTop: 3,
+                          marginBottom: -16,
+                          opacity: 0.6,
+                        }}
+                      />
+                    )}
+                  </View>
+
+                  {/* Right: Task Card */}
+                  <View
+                    className="flex-1 ml-3 rounded-2xl p-4 mb-3 shadow-sm border"
+                    style={{
+                      backgroundColor: "white",
+                      borderColor: "#F3F4F6",
+                    }}
+                  >
+                    <View className="flex-row items-center mb-1.5">
+                      <View
+                        className="h-8 w-8 rounded-lg items-center justify-center mr-3"
+                        style={{
+                          backgroundColor: displayColor + "20",
+                        }}
+                      >
+                        <Feather name="clock" size={16} color={displayColor} />
+                      </View>
+                      <Text className="text-base font-bold text-gray-900">
+                        {item.title}
+                      </Text>
+                    </View>
+                    <Text className="text-gray-400 text-sm ml-11">
+                      {item.description}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         );
       })}

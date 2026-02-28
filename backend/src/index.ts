@@ -6,31 +6,33 @@ dotenv.config({
   path: process.env.NODE_ENV === "local" ? ".env.local" : ".env.production",
 });
 
-import authRoutes from "./modules/auth/auth.routes";
+import authRoutes from "./modules/identity/auth/auth.routes";
 import testRoutes from "./routes/test.routes";
-import complaintRoutes from "./modules/complaints/complaints.routes";
+import complaintRoutes from "./modules/support/complaints/complaints.routes";
 import staffRoutes from "./modules/staff/staff.routes";
-import attachmentsRoutes from "./modules/complaints/attachments.routes";
-import lostAndFoundRoutes from "./modules/lostAndFound/lostAndFound.routes";
-import lostFoundAttachmentsRoutes from "./modules/lostAndFound/lostFoundAttachments.routes";
-import notificationsRoutes from "./modules/notifications/notifications.routes";
+import attachmentsRoutes from "./modules/support/complaints/attachments.routes";
+import lostAndFoundRoutes from "./modules/support/lostAndFound/lostAndFound.routes";
+import lostFoundAttachmentsRoutes from "./modules/support/lostAndFound/lostFoundAttachments.routes";
+import notificationsRoutes from "./modules/communication/notifications/notifications.routes";
 import { runEscalationJob } from "./jobs/escalation.job";
-import campusHubRoutes from "./modules/campusHub/campusHub.routes";
-import gatePassRoutes from "./modules/gatePass/gatePass.routes";
-import visitorsRoutes from "./modules/visitors/visitors.routes";
-import messIssueRoutes from "./modules/messIssue/messIssue.routes";
-import userCreationRoutes from "./modules/residentCreation/userCreation.routes";
-import paymentRoutes from "./modules/finesAndPayments/finesAndPayments.routes";
-import messAttachmentsRoutes from "./modules/messIssue/messAttachments.routes";
+import campusHubRoutes from "./modules/communication/campusHub/campusHub.routes";
+import gatePassRoutes from "./modules/security/gatePass/gatePass.routes";
+import visitorsRoutes from "./modules/security/visitors/visitors.routes";
+import messIssueRoutes from "./modules/support/messIssue/messIssue.routes";
+import userCreationRoutes from "./modules/identity/residentCreation/userCreation.routes";
+import paymentRoutes from "./modules//finance/finesAndPayments/finesAndPayments.routes";
+import messAttachmentsRoutes from "./modules/support/messIssue/messAttachments.routes";
 import cron from "node-cron";
-import membershipsRoutes from "./modules/memberships/memberships.routes";
-import libraryRoutes from "./modules/library/library.routes";
-import attendanceRoutes from "./modules/attendance/attendance.routes";
-import campusHubAttachmentsRoutes from "./modules/campusHub/campusHubAttachments.routes";
+import membershipsRoutes from "./modules/facilities/memberships/memberships.routes";
+import libraryRoutes from "./modules/facilities/library/library.routes";
+import attendanceRoutes from "./modules/security/attendance/attendance.routes";
+import campusHubAttachmentsRoutes from "./modules/communication/campusHub/campusHubAttachments.routes";
 import smartMessRoutes from "./modules/smartMess/smartMess.routes";
-import userRoutes from "./modules/users/users.routes";
-import orchestratorRoutes from "./modules/orchestrator/orchestrator.routes";
-import infrastructureRoutes from "./modules/infrastructure/infrastructure.routes";
+import userRoutes from "./modules/identity/users/users.routes";
+import orchestratorRoutes from "./modules/facilities/orchestrator/orchestrator.routes";
+import infrastructureRoutes from "./modules/facilities/infrastructure/infrastructure.routes";
+import marketplaceRouter from "./modules/facilities/marketplace/marketplace.routes";
+import marketplaceAttachmentRoutes from "./modules/facilities/marketplace/marketplaceAttachment.routes";
 import { startLibraryCron } from "./jobs/library.job";
 import { startOrchestratorCron } from "./jobs/orchestrator.job";
 
@@ -73,6 +75,8 @@ app.use("/api/smart-mess", smartMessRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/orchestrator", orchestratorRoutes);
 app.use("/api/infrastructure", infrastructureRoutes);
+app.use("/api/marketplace", marketplaceRouter);
+app.use("/api/marketplace", marketplaceAttachmentRoutes);
 
 const PORT = process.env.PORT || 5000;
 

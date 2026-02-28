@@ -12,6 +12,7 @@ import {
   Calendar,
   Phone,
 } from "lucide-react";
+import { SkeletonCard } from "../../components/SkeletonCard";
 
 interface VisitorRequest {
   id: string;
@@ -186,8 +187,10 @@ const VisitorsApproval = () => {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-indigo-600"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : requests.length === 0 ? (
         <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">

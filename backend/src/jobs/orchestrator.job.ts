@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { db } from "../db";
 import { bookings } from "../db/schema";
 import { eq, and, lt } from "drizzle-orm";
-import { cancelAndAutoAssign } from "../modules/orchestrator/orchestrator.service";
+import { cancelAndAutoAssign } from "../modules/facilities/orchestrator/orchestrator.service";
 
 export const startOrchestratorCron = () => {
   // Runs every single minute (* * * * *)

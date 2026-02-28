@@ -20,6 +20,7 @@ import MessStatCards from "../../components/messAnalytics/MessStatCards";
 import MessTrendChart from "../../components/messAnalytics/MessTrendChart";
 import MessCategoryPieChart from "../../components/messAnalytics/MessCategoryPieChart";
 import MessCategoryTable from "../../components/messAnalytics/MessCategoryTable";
+import { SkeletonCard } from "../../components/SkeletonCard";
 
 interface MessIssue {
   id: string;
@@ -275,8 +276,10 @@ const MessIssueManagement = () => {
 
           {/* Content */}
           {isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-indigo-600"></div>
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
             </div>
           ) : issues.length === 0 ? (
             <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">

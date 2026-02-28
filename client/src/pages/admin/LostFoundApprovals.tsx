@@ -13,6 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import AddFoundItemModal from "../../components/AddFoundItemModal";
+import { SkeletonCard } from "../../components/SkeletonCard";
 
 interface LostFoundItem {
   id: string;
@@ -170,8 +171,10 @@ const LostFoundApprovals = () => {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-indigo-600"></div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">

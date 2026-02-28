@@ -9,8 +9,8 @@ import {
   residentProfiles,
   rooms,
 } from "../../db/schema";
-import { autoAssignPendingComplaint } from "../complaints/complaints.service";
-import { createNotification } from "../notifications/notifications.service";
+import { autoAssignPendingComplaint } from "../support/complaints/complaints.service";
+import { createNotification } from "../communication/notifications/notifications.service";
 
 import { eq, and, sql } from "drizzle-orm";
 

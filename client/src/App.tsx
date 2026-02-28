@@ -25,6 +25,7 @@ import CampusHub from "./pages/admin/CampusHub";
 import VisitorsApproval from "./pages/admin/visitorsApproval";
 import MessIssueManagement from "./pages/admin/messIssue";
 import Infrastructure from "./pages/admin/Infrastructure";
+import LaundryManagement from "./pages/admin/LaundryManagement";
 
 const App = () => {
   return (
@@ -52,6 +53,7 @@ const App = () => {
           <Route path="visitor-requests" element={<VisitorsApproval />} />
           <Route path="mess-issues" element={<MessIssueManagement />} />
           <Route path="infrastructure" element={<Infrastructure />} />
+          <Route path="laundry" element={<LaundryManagement />} />
         </Route>
 
         {/* STAFF */}

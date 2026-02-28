@@ -13,10 +13,30 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { MESS_ISSUE_CATEGORIES } from "../../../shared/constants";
+import { relations } from "drizzle-orm";
 
 export const resourceTypeEnum = pgEnum("resource_type", [
   "LAUNDRY",
   "BADMINTON",
+]);
+
+export const itemConditionEnum = pgEnum("item_condition", [
+  "NEW",
+  "LIKE_NEW",
+  "GOOD",
+  "FAIR",
+  "POOR",
+]);
+export const itemStatusEnum = pgEnum("item_status", [
+  "AVAILABLE",
+  "PENDING_HANDOVER",
+  "SOLD",
+  "CANCELLED",
+]);
+export const bidStatusEnum = pgEnum("bid_status", [
+  "PENDING",
+  "ACCEPTED",
+  "REJECTED",
 ]);
 
 export const bookingStatusEnum = pgEnum("booking_status", [
@@ -561,6 +581,7 @@ export const escalations = pgTable("escalations", {
     .notNull(),
   level: integer("level").notNull(),
   reason: text("reason").notNull(),
+  escalatedFrom: uuid("escalated_from").references(() => users.id),
   escalatedTo: uuid("escalated_to").references(() => users.id),
   escalatedAt: timestamp("escalated_at").defaultNow().notNull(),
 });
@@ -822,6 +843,7 @@ export const resources = pgTable("resources", {
   type: resourceTypeEnum("type").notNull(),
 
   isOperational: boolean("is_operational").default(true), // Admin can disable broken machines
+  maintenance: text("maintenance"),
 });
 
 // 2. The Time Slots (The BookMyShow Seats)
@@ -857,3 +879,88 @@ export const waitlists = pgTable("waitlists", {
   status: waitlistStatusEnum("status").default("WAITING").notNull(),
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
 });
+
+export const marketplaceItems = pgTable("marketplace_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  hostelId: uuid("hostel_id")
+    .references(() => hostels.id)
+    .notNull(),
+  sellerId: uuid("seller_id")
+    .references(() => users.id)
+    .notNull(),
+
+  title: varchar("title", { length: 100 }).notNull(),
+  description: text("description").notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+
+  // Price in INR/lowest denomination. 0 means "Free/Giveaway"
+  price: integer("price").notNull(),
+  condition: itemConditionEnum("condition").notNull(),
+
+  status: itemStatusEnum("status").default("AVAILABLE").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 2. The Offers / Bids
+export const itemBids = pgTable("item_bids", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  itemId: uuid("item_id")
+    .references(() => marketplaceItems.id)
+    .notNull(),
+  buyerId: uuid("buyer_id")
+    .references(() => users.id)
+    .notNull(),
+
+  // Allows the buyer to negotiate ("Listed for 500, I offer 400")
+  offeredPrice: integer("offered_price").notNull(),
+
+  // Optional note: "I can come pick it up tonight!"
+  message: text("message"),
+
+  status: bidStatusEnum("status").default("PENDING").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const marketplaceAttachments = pgTable("marketplace_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  itemId: uuid("item_id")
+    .references(() => marketplaceItems.id, { onDelete: "cascade" })
+    .notNull(),
+  uploadedBy: uuid("uploaded_by")
+    .references(() => users.id)
+    .notNull(),
+  fileURL: text("file_url").notNull(), //Cloudinary secure Url
+  publicId: text("public_id").notNull(), //Cloudinary Public ID
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ─── DRIZZLE RELATIONS ───
+
+// 1. Marketplace Items Relations
+export const marketplaceItemsRelations = relations(
+  marketplaceItems,
+  ({ one, many }) => ({
+    // An item belongs to one seller (User)
+    seller: one(users, {
+      fields: [marketplaceItems.sellerId],
+      references: [users.id],
+    }),
+    // An item can have many bids
+    bids: many(itemBids),
+  }),
+);
+
+// 2. Item Bids Relations
+export const itemBidsRelations = relations(itemBids, ({ one }) => ({
+  // A bid belongs to one specific item
+  item: one(marketplaceItems, {
+    fields: [itemBids.itemId],
+    references: [marketplaceItems.id],
+  }),
+  // A bid belongs to one buyer (User)
+  buyer: one(users, {
+    fields: [itemBids.buyerId],
+    references: [users.id],
+  }),
+}));

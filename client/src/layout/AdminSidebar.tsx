@@ -12,6 +12,7 @@ import {
   MessageSquareWarning,
   IndianRupee,
   Building2,
+  WashingMachine,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -52,6 +53,7 @@ const navItems = [
     icon: Building2,
     label: "Infrastructure",
   },
+  { path: "/admin/laundry", icon: WashingMachine, label: "Laundry" },
 ];
 
 const SidebarItem = ({ item }: { item: any }) => {
